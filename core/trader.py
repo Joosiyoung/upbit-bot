@@ -388,11 +388,17 @@ def run_auto_trade():
     with _market_lock:
         market_coins = list(_market_cache.get("coins", []))
     market_map = {c["ticker"]: c for c in market_coins}
-    # 보유 코인은 market_cache에서 제외되므로 holdings 캐시에서 현재가 보완
+    # 보유 코인이 거래량 톱20에서 밀리거나 수집 실패 시 holdings 캐시로 보완
+    # holdings의 action_class(일봉×2+4h×1.5+1h×1 가중)는 market 체계보다 보수적이라
+    # 매도 보호(sell-strong) 용도로 안전 — None으로 두면 지표 매도가 조용히 비활성화됨
     with _cache_lock:
         for h in _cache.get("holdings", []):
             if h["ticker"] not in market_map:
-                market_map[h["ticker"]] = {"current": h.get("current_price"), "action_class": None, "action_text": ""}
+                market_map[h["ticker"]] = {
+                    "current":      h.get("current_price"),
+                    "action_class": h.get("action_class"),
+                    "action_text":  h.get("action_text", ""),
+                }
 
     market_age   = _market_age_sec()
     market_stale = market_age is None or market_age > config.MARKET_STALE_SEC

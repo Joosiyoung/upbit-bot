@@ -250,7 +250,8 @@ def build_market_data():
             # 1분봉 (최신 신호용) + 1시간봉 (추세용)
             df_1m  = client.get_ohlcv(ticker, "minute1",  count=100)
             df_1h  = client.get_ohlcv(ticker, "minute60", count=100)
-            df_1d  = client.get_ohlcv(ticker, "day",      count=60)
+            # EMA50(adjust=False)·MACD(26) 수렴에 봉 수가 충분해야 함 — 60개로는 시드 편향 잔존
+            df_1d  = client.get_ohlcv(ticker, "day",      count=200)
 
             current = client.get_current_price(ticker)
             if not current or df_1m.empty:
