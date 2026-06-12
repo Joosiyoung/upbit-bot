@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Upbit 자동매매 대시보드</title>
+<link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+<link rel="stylesheet" href="/static/style.css?v=2">
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo">U</div>
+    <h1>Upbit 자동매매 대시보드</h1>
+  </div>
+  <div class="header-right">
+    <span id="countdown"></span>
+    <button class="btn-refresh" id="btn-refresh" onclick="manualRefresh()">새로고침</button>
+  </div>
+</header>
+
+<div class="summary-bar" id="summary-bar" style="display:none">
+  <div class="summary-item">
+    <span class="summary-label">KRW 잔고</span>
+    <span class="summary-value" id="sum-krw">—</span>
+  </div>
+  <div class="summary-item">
+    <span class="summary-label">총 평가금액</span>
+    <span class="summary-value" id="sum-eval">—</span>
+  </div>
+  <div class="summary-item">
+    <span class="summary-label">보유 코인</span>
+    <span class="summary-value" id="sum-coins">—</span>
+  </div>
+  <div class="summary-item">
+    <span class="summary-label">마지막 갱신</span>
+    <span class="summary-value" style="font-size:13px" id="sum-updated">—</span>
+  </div>
+</div>
+
+<div class="page-layout">
+
+  <!-- ── 왼쪽 패널: 대표 코인 시장 분석 ── -->
+  <div class="panel-left">
+    <div class="market-section" id="market-section">
+      <div class="market-header">
+        <div class="market-title">
+          <span class="dot"></span>
+          대표 코인 시장 분석
+        </div>
+        <div class="market-meta">
+        </div>
+      </div>
+      <div id="market-loading">
+        <div class="spinner-sm"></div>
+        시장 데이터 분석 중...
+      </div>
+      <div class="market-grid" id="market-grid" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- ── 오른쪽 패널: 보유현황 + 자동매매 ── -->
+  <div class="panel-right">
+    <div id="loading">
+      <div class="spinner"></div>
+      <span class="loading-text" id="loading-text">데이터 분석 중... (첫 로드는 30~60초 소요됩니다)</span>
+    </div>
+    <div id="error-banner"></div>
+    <div id="dashboard">
+      <div class="holdings-grid" id="holdings-grid"></div>
+    </div>
+
+    <!-- ── 자동 매매 컨트롤 ── -->
+    <div class="trading-section" id="trading-section">
+  <div class="trading-header">
+    <div class="trading-title">
+      <span class="dot-trade" id="trade-dot"></span>
+      자동 매매
+    </div>
+    <div class="trading-controls">
+      <span class="mode-badge" id="trade-mode-badge">—</span>
+      <button class="btn-trade-sim"  id="btn-trade-sim"  onclick="tradingStart(false)">시뮬레이션 시작</button>
+      <button class="btn-trade-live" id="btn-trade-live" onclick="tradingStartLive()">실거래 시작</button>
+      <button class="btn-trade-hold" id="btn-trade-hold" onclick="tradingStop('hold')" disabled>보유 유지 멈춤</button>
+      <button class="btn-trade-stop" id="btn-trade-stop" onclick="tradingStop('liquidate')" disabled>청산 후 멈춤</button>
+    </div>
+  </div>
+
+  <div class="trading-status-bar" id="trade-status-bar">
+    <span class="ts-label">상태</span>
+    <span class="ts-msg" id="trade-status-msg">서버 연결 중...</span>
+    <span class="ts-label">마지막 체크</span>
+    <span id="trade-last-check">—</span>
+    <span class="ts-label">손절</span>
+    <span id="trade-loss">—</span>
+    <span class="ts-label">익절</span>
+    <span id="trade-profit">—</span>
+  </div>
+
+  <!-- 보유 포지션 -->
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:12px">
+    <div class="pos-section-title" style="padding:10px 14px 8px">
+      보유 포지션
+      <span class="pos-budget-info">
+        예산 <span id="pos-budget-used">0</span> / <span id="pos-budget-total">100,000</span>원
+      </span>
+    </div>
+    <table class="pos-table">
+      <thead>
+        <tr>
+          <th>코인</th>
+          <th>진입가</th>
+          <th>현재가</th>
+          <th>수익률</th>
+          <th>투자금</th>
+          <th>진입시간</th>
+        </tr>
+      </thead>
+      <tbody id="positions-body">
+        <tr><td colspan="6" class="tlog-empty">보유 포지션 없음</td></tr>
+      </tbody>
+      <tfoot id="positions-foot" style="display:none">
+        <tr style="border-top:2px solid var(--border);background:rgba(255,255,255,0.04)">
+          <td colspan="3" style="padding:10px 10px;font-size:13px;color:var(--text-pri);font-weight:700;letter-spacing:.3px">
+            <span style="background:rgba(255,255,255,0.08);border-radius:4px;padding:3px 8px">합산 수익률</span>
+          </td>
+          <td id="pos-total-profit" style="padding:10px 10px;font-weight:800;font-size:16px">—</td>
+          <td id="pos-total-invested" colspan="2" style="padding:10px 10px;font-size:12px;color:var(--text-muted)">—</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <!-- 거래 이력 -->
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+    <div class="pos-section-title" style="padding:10px 14px 8px">거래 이력</div>
+    <table class="trade-log-table">
+      <thead>
+        <tr>
+          <th>시간</th>
+          <th>구분</th>
+          <th>코인</th>
+          <th>사유</th>
+          <th>체결가</th>
+          <th>금액</th>
+          <th>모드</th>
+        </tr>
+      </thead>
+      <tbody id="trade-log-body">
+        <tr><td colspan="7" class="tlog-empty">자동 매매를 시작하면 여기에 거래 이력이 표시됩니다.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div><!-- trading-section -->
+  </div><!-- panel-right -->
+</div><!-- page-layout -->
+
+<footer id="footer" style="display:none">
+  전략: <span id="foot-strategy">—</span> &nbsp;|&nbsp;
+  캔들: <span id="foot-interval">—</span> &nbsp;|&nbsp;
+  점수 기준: 일봉×2 + 4시간봉×1.5 + 1시간봉×1 &nbsp;|&nbsp;
+  30초마다 자동 갱신
+</footer>
+
+<script src="/static/app.js?v=2"></script>
+</body>
+</html>

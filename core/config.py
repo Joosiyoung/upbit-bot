@@ -1,0 +1,82 @@
+import os
+from dotenv import load_dotenv
+
+# .env는 프로젝트 루트에 위치 (이 파일은 core/ 안에 있으므로 상위 폴더 기준)
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(_ROOT, ".env"))
+
+# Upbit API 키
+ACCESS_KEY = os.getenv("UPBIT_ACCESS_KEY", "")
+SECRET_KEY = os.getenv("UPBIT_SECRET_KEY", "")
+
+# 1회 매수 금액 (KRW)
+TRADE_AMOUNT_KRW = float(os.getenv("TRADE_AMOUNT_KRW", "100000"))
+
+# 손절/익절 설정
+MAX_LOSS_PERCENT = float(os.getenv("MAX_LOSS_PERCENT", "3.0"))
+TAKE_PROFIT_PERCENT = float(os.getenv("TAKE_PROFIT_PERCENT", "5.0"))
+
+# 전략 선택: rsi / macd / bollinger / combined
+STRATEGY = os.getenv("STRATEGY", "combined")
+
+# 캔들 단위 (표시용)
+INTERVAL = os.getenv("INTERVAL", "minute60")
+
+# 실제 매매 여부
+LIVE_TRADING = os.getenv("LIVE_TRADING", "False").lower() == "true"
+
+# 자동 매매 파라미터
+MAX_POSITIONS     = int(os.getenv("MAX_POSITIONS",     "5"))    # 최대 동시 보유 종목 수
+MIN_ORDER_KRW     = float(os.getenv("MIN_ORDER_KRW",   "5000")) # 업비트 최소 주문 금액 (원)
+SELL_COOLDOWN_MIN = int(os.getenv("SELL_COOLDOWN_MIN", "30"))   # 매도 후 재매수 금지 시간 (분)
+
+# ─── 리스크 관리 ───
+DAILY_LOSS_LIMIT_PCT     = float(os.getenv("DAILY_LOSS_LIMIT_PCT",     "5.0"))  # 일일 실현손실 한도 (% of 당일 시작 자산) → 초과 시 당일 신규 매수 차단
+MAX_CONSECUTIVE_STOPLOSS = int(os.getenv("MAX_CONSECUTIVE_STOPLOSS",   "3"))    # 연속 손절 허용 횟수 → 초과 시 전역 매수 쿨다운
+GLOBAL_BUY_COOLDOWN_MIN  = int(os.getenv("GLOBAL_BUY_COOLDOWN_MIN",    "120"))  # 연속 손절 후 전역 매수 금지 시간 (분)
+MAX_HOLD_HOURS           = float(os.getenv("MAX_HOLD_HOURS",           "48"))   # 최대 보유 시간 (시간) → 초과 시 청산 (time-stop)
+MARKET_STALE_SEC         = int(os.getenv("MARKET_STALE_SEC",           "180"))  # 시장 캐시 신선도 한계 (초) → 초과 시 신규 매수 차단
+
+# ─── 트레일링 스탑 ───
+TRAILING_START_PCT = float(os.getenv("TRAILING_START_PCT", "3.0"))  # 최고 수익률이 이 값 이상이면 트레일링 활성화 (%)
+TRAILING_STOP_PCT  = float(os.getenv("TRAILING_STOP_PCT",  "1.5"))  # 고점 대비 하락폭 한도 (%) → 초과 시 청산
+
+# ─── 추가매수 (Phase 2.5) ───
+ADD_BUY_MIN_PROFIT   = float(os.getenv("ADD_BUY_MIN_PROFIT",   "0.0"))  # 추가매수 허용 최소 수익률 (%) — 손실 중 물타기 방지
+ADD_BUY_MAX_PROFIT   = float(os.getenv("ADD_BUY_MAX_PROFIT",   "3.0"))  # 추가매수 허용 최대 수익률 (%) — 추격매수 방지
+MAX_SLOTS_PER_TICKER = int(os.getenv("MAX_SLOTS_PER_TICKER",   "2"))    # 한 종목이 점유 가능한 최대 슬롯 수
+
+# ─── 매수 실패 백오프 ───
+BUY_FAIL_LIMIT        = int(os.getenv("BUY_FAIL_LIMIT",        "3"))   # 연속 매수 실패 허용 횟수
+BUY_FAIL_COOLDOWN_MIN = int(os.getenv("BUY_FAIL_COOLDOWN_MIN", "30"))  # 실패 한도 초과 시 해당 종목 매수 금지 시간 (분)
+
+# 기술적 지표 파라미터
+RSI_PERIOD = 14
+
+MACD_FAST = 12
+MACD_SLOW = 26
+MACD_SIGNAL = 9
+
+BOLLINGER_PERIOD = 20
+BOLLINGER_STD = 2.0
+
+# 이동평균선
+EMA_SHORT = 9
+EMA_MID = 21
+EMA_LONG = 50
+
+# ─── 대시보드 바인딩 ───
+# 로컬 PC: 기본값 127.0.0.1 유지.
+# VPS: Tailscale IP(100.x.x.x)를 지정하면 tailnet 기기에서만 접속 가능 (공개 노출 방지).
+DASHBOARD_HOST = os.getenv("DASHBOARD_HOST", "127.0.0.1")
+DASHBOARD_PORT = int(os.getenv("DASHBOARD_PORT", "5000"))
+
+# ─── Telegram 알림 ───
+# @BotFather로 봇 생성 후 토큰 발급, 채팅 ID는 @userinfobot 등으로 확인.
+# 둘 다 설정돼야 알림이 활성화됨 (미설정 시 알림 기능 전체 비활성).
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID", "")
+
+# Fear & Greed 설정
+FEAR_GREED_GREED_MAX = int(os.getenv("FEAR_GREED_GREED_MAX", "80"))  # 이 이상이면 극단 탐욕 → 신규 매수 차단
+FEAR_GREED_FEAR_MIN  = int(os.getenv("FEAR_GREED_FEAR_MIN",  "20"))  # 이 이하면 극단 공포(폭락장) → 신규 매수 차단

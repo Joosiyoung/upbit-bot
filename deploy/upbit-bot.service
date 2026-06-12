@@ -1,0 +1,33 @@
+# systemd 서비스 유닛 — Upbit 자동매매 봇
+#
+# 설치:
+#   sudo cp deploy/upbit-bot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now upbit-bot
+#
+# 상태 확인:  systemctl status upbit-bot
+# 로그 확인:  journalctl -u upbit-bot -f
+#
+# 주의: User / WorkingDirectory / ExecStart 경로는 본인 환경에 맞게 수정.
+#       (Oracle Cloud Ubuntu 기본 사용자는 ubuntu)
+
+[Unit]
+Description=Upbit Auto-Trading Bot Dashboard
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/upbit-bot
+ExecStart=/home/ubuntu/upbit-bot/venv/bin/python app.py
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+# 봇이 비정상 종료를 반복해도 시스템 전체를 보호
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Install]
+WantedBy=multi-user.target
