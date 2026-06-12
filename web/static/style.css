@@ -1,40 +1,38 @@
 /* ─────────────────────────────────────────────
-   Upbit 자동매매 대시보드 — 가독성 개선 테마
-   (클래스 체계는 app.js와 1:1 유지, 스타일 값만 재설계)
+   Upbit AutoTrade — Nordic Minimal Light Theme
    ───────────────────────────────────────────── */
 
 :root {
-  /* 배경 — 단계별 깊이감 */
-  --bg-base:     #000000;
-  --bg-card:     #000000;
-  --bg-header:   #000000;
-  --bg-tab:      #000000;
-  --bg-tab-act:  #1f2333;
-  --bg-hover:    rgba(255,255,255,.035);
+  --bg-base:    #f2f4f8;
+  --bg-card:    #ffffff;
+  --bg-header:  #ffffff;
+  --bg-section: #f8f9fc;
+  --bg-tab:     #f2f4f8;
+  --bg-tab-act: #eaedfa;
+  --bg-hover:   rgba(59,91,219,.04);
 
-  /* 경계선 */
-  --border:      #272b3b;
-  --border-light:#3a3f58;
+  --border:       #e3e6ef;
+  --border-light: #c8cde0;
 
-  /* 텍스트 — 대비 강화 (기존 보조/뮤트 색이 너무 어두웠음) */
-  --text-pri:    #f0f2f8;
-  --text-sec:    #a8adc4;
-  --text-muted:  #767b96;
+  --text-pri:   #1a1d2e;
+  --text-sec:   #4a5168;
+  --text-muted: #8b91ab;
 
-  /* 시그널 컬러 (한국 관례: 상승=빨강, 하락=파랑) */
-  --green:       #2dd4a8;
-  --green-dim:   rgba(45,212,168,.14);
-  --red:         #f2555a;
-  --red-dim:     rgba(242,85,90,.14);
-  --yellow:      #fbc94d;
-  --yellow-dim:  rgba(251,201,77,.12);
-  --blue:        #6db3f7;
-  --blue-dim:    rgba(109,179,247,.13);
-  --purple:      #ce93d8;
+  /* 한국 관례: 상승=빨강, 하락=파랑 */
+  --green:      #12b886;
+  --green-dim:  rgba(18,184,134,.1);
+  --red:        #f03e3e;
+  --red-dim:    rgba(240,62,62,.08);
+  --yellow:     #f59f00;
+  --yellow-dim: rgba(245,159,0,.1);
+  --blue:       #3b5bdb;
+  --blue-dim:   rgba(59,91,219,.1);
+  --purple:     #7950f2;
 
-  --radius:      12px;
-  --radius-sm:   8px;
-  --shadow-card: 0 1px 3px rgba(0,0,0,.3);
+  --radius:    12px;
+  --radius-sm: 8px;
+  --shadow:    0 1px 4px rgba(0,0,0,.06), 0 0 0 1px rgba(0,0,0,.04);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,.1);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -52,7 +50,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* 숫자는 고정폭으로 — 가격·수익률 자릿수 정렬 */
 .summary-value, .price-value, .mcard-price, .mcard-change,
 .pos-table td, .trade-log-table td, .ind-value, .mind-value, .mcard-score {
   font-variant-numeric: tabular-nums;
@@ -62,863 +59,602 @@ body {
 header {
   background: var(--bg-header);
   border-bottom: 1px solid var(--border);
-  padding: 14px 24px;
+  padding: 0 20px;
+  height: 60px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0;
   flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
   z-index: 100;
 }
-.header-left { display: flex; align-items: center; gap: 12px; }
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-right: 20px;
+  border-right: 1px solid var(--border);
+  margin-right: 20px;
+  flex-shrink: 0;
+}
 .logo {
-  width: 34px; height: 34px;
-  background: linear-gradient(135deg, #2dd4a8, #6db3f7);
-  border-radius: 9px;
+  width: 32px; height: 32px;
+  background: var(--blue);
+  border-radius: 8px;
   display: flex; align-items: center; justify-content: center;
-  font-weight: 800; font-size: 17px; color: #0d0f15;
+  font-weight: 800; font-size: 16px; color: #fff;
+  flex-shrink: 0;
 }
-h1 { font-size: 16px; font-weight: 700; color: var(--text-pri); letter-spacing: -.2px; }
-.header-right { display: flex; align-items: center; gap: 14px; }
-#countdown { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.brand-name {
+  font-size: 14px; font-weight: 700;
+  color: var(--text-pri); white-space: nowrap;
+}
+
+/* 헤더 통계 (summary-bar를 헤더 안으로 흡수) */
+.summary-bar {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 0;
+  background: none;
+  border: none;
+}
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 18px;
+  border-right: 1px solid var(--border);
+  background: none;
+}
+.summary-label {
+  font-size: 10.5px; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: .5px;
+}
+.summary-value {
+  font-size: 14px; font-weight: 700; color: var(--text-pri);
+}
+.summary-value.positive { color: var(--red); }
+.summary-value.negative { color: var(--blue); }
+
+/* 헤더 오른쪽 */
+.header-right {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+}
+.live-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; font-weight: 800; color: var(--green);
+  padding: 4px 10px; border-radius: 20px;
+  background: var(--green-dim); border: 1px solid rgba(18,184,134,.3);
+}
+.live-badge .live-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green); animation: pulse 1.5s infinite;
+}
+.header-refresh {
+  display: flex; align-items: center; gap: 6px;
+  margin-left: 4px; padding-left: 12px;
+  border-left: 1px solid var(--border);
+  font-size: 12px; color: var(--text-muted);
+}
+#countdown { font-size: 11.5px; color: var(--text-sec); font-variant-numeric: tabular-nums; }
+#sum-updated { font-variant-numeric: tabular-nums; }
+
 .btn-refresh {
-  background: var(--bg-tab-act);
-  border: 1px solid var(--border-light);
-  color: var(--text-sec);
-  padding: 7px 16px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  transition: all .15s;
+  background: none; border: 1px solid var(--border-light);
+  color: var(--text-sec); padding: 5px 11px;
+  border-radius: var(--radius-sm); cursor: pointer;
+  font-size: 12px; font-weight: 600; transition: all .15s;
 }
-.btn-refresh:hover { background: var(--border-light); color: var(--text-pri); }
-.btn-refresh:disabled { opacity: .45; cursor: not-allowed; }
+.btn-refresh:hover { background: var(--bg-tab); color: var(--text-pri); }
+.btn-refresh:disabled { opacity: .4; cursor: not-allowed; }
+
+/* 헤더 매매 버튼 */
+.btn-trade-live {
+  background: var(--blue); border: none; color: #fff;
+  padding: 7px 15px; border-radius: var(--radius-sm);
+  cursor: pointer; font-size: 12.5px; font-weight: 700; transition: all .15s;
+}
+.btn-trade-live:hover    { background: #2e4cbf; }
+.btn-trade-live:disabled { opacity: .4; cursor: not-allowed; }
+
+.btn-trade-hold {
+  background: var(--bg-tab); border: 1px solid var(--border-light);
+  color: var(--text-sec); padding: 7px 15px;
+  border-radius: var(--radius-sm); cursor: pointer;
+  font-size: 12.5px; font-weight: 600; transition: all .15s;
+}
+.btn-trade-hold:hover    { background: var(--border); color: var(--text-pri); }
+.btn-trade-hold:disabled { opacity: .4; cursor: not-allowed; }
+
+.btn-trade-stop {
+  background: var(--red-dim); border: 1px solid rgba(240,62,62,.3);
+  color: var(--red); padding: 7px 15px;
+  border-radius: var(--radius-sm); cursor: pointer;
+  font-size: 12.5px; font-weight: 700; transition: all .15s;
+}
+.btn-trade-stop:hover    { background: var(--red); color: #fff; }
+.btn-trade-stop:disabled { opacity: .4; cursor: not-allowed; }
 
 /* ── 2패널 레이아웃 ── */
 .page-layout {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  overflow: hidden;
+  flex: 1; min-height: 0; display: flex; overflow: hidden;
 }
 .panel-left {
-  flex: 1;
-  min-width: 0;
-  overflow-y: auto;
-  border-right: 1px solid var(--border);
+  flex: 1; min-width: 0; overflow-y: auto; border-right: 1px solid var(--border);
 }
 .panel-right {
-  flex: 1;
-  min-width: 0;
-  overflow-y: auto;
+  width: 720px; flex-shrink: 0; overflow-y: auto; background: var(--bg-base);
 }
 .panel-left::-webkit-scrollbar,
-.panel-right::-webkit-scrollbar { width: 8px; }
+.panel-right::-webkit-scrollbar { width: 5px; }
 .panel-left::-webkit-scrollbar-track,
 .panel-right::-webkit-scrollbar-track { background: transparent; }
 .panel-left::-webkit-scrollbar-thumb,
-.panel-right::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 4px; }
-.panel-left::-webkit-scrollbar-thumb:hover,
-.panel-right::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
-
-/* ── 요약 바 ── */
-.summary-bar {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 1px;
-  background: var(--border);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-.summary-item {
-  background: var(--bg-header);
-  padding: 14px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.summary-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: .7px;
-}
-.summary-value { font-size: 20px; font-weight: 800; color: var(--text-pri); letter-spacing: -.3px; }
-.summary-value.positive { color: var(--green); }
-.summary-value.negative { color: var(--red); }
+.panel-right::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
 
 /* ── 로딩 / 에러 ── */
 #loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 80px 20px;
-  gap: 18px;
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 60px 20px; gap: 14px;
 }
 .spinner {
-  width: 42px; height: 42px;
-  border: 3px solid var(--border);
-  border-top-color: var(--green);
-  border-radius: 50%;
-  animation: spin .8s linear infinite;
+  width: 34px; height: 34px;
+  border: 3px solid var(--border); border-top-color: var(--blue);
+  border-radius: 50%; animation: spin .8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-.loading-text { color: var(--text-sec); font-size: 14px; }
+.loading-text { color: var(--text-sec); font-size: 13.5px; }
 
 #error-banner {
-  display: none;
-  margin: 20px;
-  padding: 16px 20px;
-  background: var(--red-dim);
-  border: 1px solid var(--red);
-  border-radius: var(--radius);
-  color: var(--red);
-  font-weight: 600;
+  display: none; margin: 16px 20px; padding: 13px 16px;
+  background: var(--red-dim); border: 1px solid rgba(240,62,62,.3);
+  border-radius: var(--radius); color: var(--red); font-weight: 600;
 }
 
 /* ── 보유 코인 그리드 ── */
 #dashboard { display: none; }
 .holdings-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: 16px;
-  padding: 20px 24px;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 12px; padding: 16px 20px 0;
 }
 
-/* ── 코인 카드 ── */
+/* ── 코인 카드 (보유 코인 상세 분석) ── */
 .coin-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-  box-shadow: var(--shadow-card);
-  transition: border-color .2s;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow);
+  transition: box-shadow .2s;
 }
-.coin-card:hover { border-color: var(--border-light); }
+.coin-card:hover { box-shadow: var(--shadow-lg); }
+.coin-card.buy-strong  { border-left: 3px solid var(--green); }
+.coin-card.buy-watch   { border-left: 3px solid var(--green); }
+.coin-card.buy-mild    { border-left: 3px solid #40c057; }
+.coin-card.sell-strong { border-left: 3px solid var(--red); }
+.coin-card.sell-watch  { border-left: 3px solid var(--red); }
+.coin-card.sell-mild   { border-left: 3px solid #ff6b6b; }
+.coin-card.hold        { border-left: 3px solid var(--border-light); }
 
-/* 액션 레벨별 왼쪽 테두리 */
-.coin-card.buy-strong  { border-left: 4px solid var(--green); }
-.coin-card.buy-watch   { border-left: 4px solid var(--green); }
-.coin-card.buy-mild    { border-left: 4px solid #5cbb60; }
-.coin-card.sell-strong { border-left: 4px solid var(--red); }
-.coin-card.sell-watch  { border-left: 4px solid var(--red); }
-.coin-card.sell-mild   { border-left: 4px solid #ff8a65; }
-.coin-card.hold        { border-left: 4px solid var(--border-light); }
-
-/* 카드 헤더 */
 .card-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px 12px;
-  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px 10px; border-bottom: 1px solid var(--border);
 }
 .coin-icon {
-  width: 38px; height: 38px;
-  background: linear-gradient(135deg, rgba(45,212,168,.16), rgba(109,179,247,.16));
-  border: 1px solid var(--border-light);
-  border-radius: 50%;
+  width: 35px; height: 35px; background: var(--blue-dim);
+  border: 1px solid rgba(59,91,219,.15); border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 13px; color: var(--blue);
+  font-weight: 700; font-size: 10.5px; color: var(--blue); flex-shrink: 0;
 }
-.coin-name { font-size: 17px; font-weight: 800; flex: 1; letter-spacing: -.2px; }
+.coin-name { font-size: 15px; font-weight: 800; flex: 1; color: var(--text-pri); }
 .score-badge {
-  font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-weight: 700;
-  background: var(--bg-tab);
-  border: 1px solid var(--border);
-  color: var(--text-sec);
-  font-variant-numeric: tabular-nums;
+  font-size: 11px; padding: 3px 9px; border-radius: 20px; font-weight: 700;
+  background: var(--bg-tab); border: 1px solid var(--border); color: var(--text-sec);
 }
 .signal-badge {
-  font-size: 12px;
-  padding: 5px 12px;
-  border-radius: 20px;
-  font-weight: 800;
-  letter-spacing: .2px;
+  font-size: 11px; padding: 4px 10px; border-radius: 20px; font-weight: 800;
 }
-.signal-badge.buy-strong, .signal-badge.buy-watch {
-  background: var(--green-dim); color: var(--green);
-}
-.signal-badge.buy-mild {
-  background: rgba(92,187,96,.15); color: #7ccf80;
-}
-.signal-badge.sell-strong, .signal-badge.sell-watch {
-  background: var(--red-dim); color: var(--red);
-}
-.signal-badge.sell-mild {
-  background: rgba(255,138,101,.15); color: #ff9e80;
-}
-.signal-badge.hold {
-  background: var(--bg-tab); color: var(--text-muted);
-}
+.signal-badge.buy-strong, .signal-badge.buy-watch { background: var(--green-dim); color: #0ca678; }
+.signal-badge.buy-mild   { background: rgba(64,192,87,.1); color: #2f9e44; }
+.signal-badge.sell-strong,.signal-badge.sell-watch{ background: var(--red-dim); color: var(--red); }
+.signal-badge.sell-mild  { background: rgba(255,107,107,.1); color: #c92a2a; }
+.signal-badge.hold       { background: var(--bg-tab); color: var(--text-muted); border: 1px solid var(--border); }
 
-/* 가격 그리드 */
 .price-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1px;
-  background: var(--border);
-  border-bottom: 1px solid var(--border);
+  display: grid; grid-template-columns: repeat(2,1fr);
+  gap: 1px; background: var(--border); border-bottom: 1px solid var(--border);
 }
 .price-item {
-  background: var(--bg-card);
-  padding: 11px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  background: var(--bg-card); padding: 10px 14px;
+  display: flex; flex-direction: column; gap: 2px;
 }
-.price-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: .5px;
-}
-.price-value { font-size: 15px; font-weight: 700; color: var(--text-pri); }
+.price-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; }
+.price-value { font-size: 13.5px; font-weight: 700; color: var(--text-pri); }
 .price-value.profit-pos { color: var(--red); }
 .price-value.profit-neg { color: var(--blue); }
 
-/* 타임프레임 탭 */
-.tf-tabs {
-  display: flex;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-tab);
-}
+.tf-tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--bg-section); }
 .tf-btn {
-  flex: 1;
-  padding: 10px 8px;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: all .15s;
+  flex: 1; padding: 9px 6px; background: none; border: none;
+  color: var(--text-muted); font-size: 11.5px; font-weight: 600; cursor: pointer;
+  border-bottom: 2px solid transparent; transition: all .15s;
 }
 .tf-btn:hover { color: var(--text-sec); background: var(--bg-hover); }
-.tf-btn.active {
-  color: var(--blue);
-  border-bottom-color: var(--blue);
-  background: var(--bg-tab-act);
-}
+.tf-btn.active { color: var(--blue); border-bottom-color: var(--blue); background: var(--bg-card); }
 
-/* 타임프레임 패널 */
-.tf-panel { display: none; padding: 12px 16px; }
+.tf-panel { display: none; padding: 10px 14px; }
 .tf-panel.active { display: block; }
 
 .indicator-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--bg-tab);
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 0; border-bottom: 1px solid var(--bg-tab);
 }
 .indicator-row:last-child { border-bottom: none; }
 .ind-label {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-muted);
-  width: 52px;
-  flex-shrink: 0;
-  text-transform: uppercase;
-  letter-spacing: .3px;
+  font-size: 10px; font-weight: 700; color: var(--text-muted);
+  width: 46px; flex-shrink: 0; text-transform: uppercase; letter-spacing: .3px;
 }
-
-/* RSI 바 */
 .rsi-bar-wrap {
-  flex: 1;
-  height: 7px;
-  background: var(--bg-tab);
-  border-radius: 4px;
-  overflow: visible;
-  position: relative;
+  flex: 1; height: 5px; background: var(--bg-tab); border-radius: 3px;
+  overflow: visible; position: relative;
 }
-.rsi-bar-fill {
-  height: 100%;
-  border-radius: 4px;
-  transition: width .4s ease;
-}
-.rsi-bar-fill.oversold  { background: var(--green); }
-.rsi-bar-fill.weak      { background: #7ccf80; }
-.rsi-bar-fill.neutral   { background: var(--text-muted); }
-.rsi-bar-fill.strong    { background: var(--yellow); }
-.rsi-bar-fill.overbought{ background: var(--red); }
-
-/* RSI 구간 마커 */
-.rsi-bar-marker {
-  position: absolute;
-  top: -2px;
-  height: 11px;
-  width: 1px;
-  background: var(--border-light);
-}
-
-.ind-value {
-  font-size: 12px;
-  font-weight: 700;
-  width: 40px;
-  text-align: right;
-  flex-shrink: 0;
-}
-.ind-value.oversold  { color: var(--green); }
-.ind-value.weak      { color: #7ccf80; }
-.ind-value.neutral   { color: var(--text-sec); }
-.ind-value.strong    { color: var(--yellow); }
-.ind-value.overbought{ color: var(--red); }
-
-.ind-text { font-size: 12.5px; flex: 1; color: var(--text-sec); }
+.rsi-bar-fill { height: 100%; border-radius: 3px; transition: width .4s ease; }
+.rsi-bar-fill.oversold   { background: var(--green); }
+.rsi-bar-fill.weak       { background: #40c057; }
+.rsi-bar-fill.neutral    { background: var(--text-muted); }
+.rsi-bar-fill.strong     { background: var(--yellow); }
+.rsi-bar-fill.overbought { background: var(--red); }
+.rsi-bar-marker { position: absolute; top: -2px; height: 9px; width: 1px; background: var(--border-light); }
+.ind-value { font-size: 11px; font-weight: 700; width: 36px; text-align: right; flex-shrink: 0; }
+.ind-value.oversold   { color: var(--green); }
+.ind-value.weak       { color: #40c057; }
+.ind-value.neutral    { color: var(--text-sec); }
+.ind-value.strong     { color: var(--yellow); }
+.ind-value.overbought { color: var(--red); }
+.ind-text { font-size: 12px; flex: 1; color: var(--text-sec); }
 .ind-text.strong-buy  { color: var(--green); font-weight: 700; }
 .ind-text.strong-sell { color: var(--red);   font-weight: 700; }
-.ind-text.bullish     { color: #7ccf80; }
-.ind-text.bearish     { color: #f59a9d; }
+.ind-text.bullish     { color: #2f9e44; }
+.ind-text.bearish     { color: #c92a2a; }
 .ind-text.neutral     { color: var(--text-sec); }
 .ind-text.buy-zone    { color: var(--green); }
 .ind-text.sell-zone   { color: var(--red); }
-
 .ind-text.trend-bullish { color: var(--green); }
 .ind-text.trend-bearish { color: var(--red); }
 .ind-text.trend-neutral { color: var(--text-sec); }
 
-/* 지지/저항 슬라이더 */
-.sr-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  padding: 6px 0 2px;
-}
-.sr-label { font-size: 11px; color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
-.sr-bar-wrap {
-  flex: 1;
-  height: 5px;
-  background: var(--bg-tab);
-  border-radius: 3px;
-  position: relative;
-}
-.sr-bar-track {
-  position: absolute;
-  height: 100%;
-  background: linear-gradient(90deg, var(--green-dim), var(--red-dim));
-  border-radius: 3px;
-  width: 100%;
-}
+.sr-row { display: flex; align-items: center; gap: 7px; margin-top: 7px; padding-top: 5px; }
+.sr-label { font-size: 10px; color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sr-bar-wrap { flex: 1; height: 4px; background: var(--bg-tab); border-radius: 2px; position: relative; }
+.sr-bar-track { position: absolute; height: 100%; background: linear-gradient(90deg, var(--green-dim), var(--red-dim)); border-radius: 2px; width: 100%; }
 .sr-bar-dot {
-  position: absolute;
-  width: 11px; height: 11px;
-  background: var(--yellow);
-  border-radius: 50%;
-  top: -3px;
-  transform: translateX(-50%);
-  border: 2px solid var(--bg-card);
-  transition: left .4s ease;
+  position: absolute; width: 9px; height: 9px; background: var(--yellow);
+  border-radius: 50%; top: -2.5px; transform: translateX(-50%);
+  border: 2px solid var(--bg-card); transition: left .4s ease;
 }
 
-/* 타이밍 가이드 */
-.guide-section {
-  border-top: 1px solid var(--border);
-  margin-top: 0;
-}
+.guide-section { border-top: 1px solid var(--border); }
 .guide-section summary {
-  padding: 11px 16px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text-sec);
-  cursor: pointer;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  user-select: none;
-  transition: color .15s, background .15s;
+  padding: 9px 14px; font-size: 12px; font-weight: 600; color: var(--text-sec);
+  cursor: pointer; list-style: none; display: flex; align-items: center;
+  justify-content: space-between; user-select: none; transition: background .15s;
 }
 .guide-section summary::-webkit-details-marker { display: none; }
-.guide-section summary:hover { color: var(--text-pri); background: var(--bg-hover); }
-.guide-section summary::after {
-  content: '▾';
-  font-size: 12px;
-  transition: transform .2s;
-}
+.guide-section summary:hover { background: var(--bg-hover); }
+.guide-section summary::after { content: '▾'; font-size: 11px; transition: transform .2s; }
 .guide-section[open] summary::after { transform: rotate(180deg); }
-
-.guide-content {
-  padding: 0 16px 14px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-.guide-buy, .guide-sell { display: flex; flex-direction: column; gap: 6px; }
-.guide-title {
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: .6px;
-  margin-bottom: 2px;
-}
+.guide-content { padding: 0 14px 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.guide-buy, .guide-sell { display: flex; flex-direction: column; gap: 5px; }
+.guide-title { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px; }
 .guide-buy .guide-title  { color: var(--green); }
 .guide-sell .guide-title { color: var(--red); }
-.guide-point {
-  font-size: 12px;
-  color: var(--text-sec);
-  line-height: 1.55;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: var(--bg-tab);
-}
-.guide-buy  .guide-point { border-left: 3px solid var(--green); }
-.guide-sell .guide-point { border-left: 3px solid var(--red); }
+.guide-point { font-size: 11.5px; color: var(--text-sec); line-height: 1.5; padding: 5px 9px; border-radius: 5px; background: var(--bg-tab); }
+.guide-buy  .guide-point { border-left: 2px solid var(--green); }
+.guide-sell .guide-point { border-left: 2px solid var(--red); }
 
 /* ── 푸터 ── */
 footer {
-  text-align: center;
-  padding: 12px 20px;
-  color: var(--text-muted);
-  font-size: 12px;
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-  margin-top: 10px;
+  text-align: center; padding: 9px 20px;
+  color: var(--text-muted); font-size: 11.5px;
+  border-top: 1px solid var(--border); flex-shrink: 0;
+  background: var(--bg-card);
 }
 
-/* ── 대표 코인 마켓 섹션 ── */
-.market-section {
-  padding: 0 24px 24px;
-}
+/* ── 시장 분석 섹션 ── */
+.market-section { padding: 0 20px 20px; }
 .market-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 0 14px;
+  display: flex; align-items: flex-start;
+  justify-content: space-between; padding: 16px 0 12px;
 }
-.market-title {
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--text-pri);
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  letter-spacing: -.2px;
+.market-title { display: flex; flex-direction: column; gap: 2px; }
+.market-title-main {
+  font-size: 15px; font-weight: 800; color: var(--text-pri);
+  display: flex; align-items: center; gap: 8px;
 }
-.market-title .dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: var(--green);
-  animation: pulse 1.5s ease-in-out infinite;
+.market-title-main .dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green); animation: pulse 1.5s infinite;
 }
+.market-title-sub { font-size: 11.5px; color: var(--text-muted); margin-left: 15px; }
 @keyframes pulse {
   0%,100% { opacity: 1; transform: scale(1); }
   50%      { opacity: .4; transform: scale(.8); }
 }
-.market-meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-#market-countdown { color: var(--text-sec); }
+.market-meta { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-muted); }
 
 .market-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
 }
 
+/* ── 마켓 카드 (Nordic Minimal compact) ── */
 .market-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-  box-shadow: var(--shadow-card);
-  transition: border-color .2s, transform .15s;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow);
+  transition: box-shadow .15s, transform .12s;
 }
-.market-card:hover { border-color: var(--border-light); transform: translateY(-1px); }
-.market-card.buy-strong  { border-left: 4px solid var(--green); }
-.market-card.buy-watch   { border-left: 4px solid var(--green); }
-.market-card.buy-mild    { border-left: 4px solid #5cbb60; }
-.market-card.sell-strong { border-left: 4px solid var(--red); }
-.market-card.sell-watch  { border-left: 4px solid var(--red); }
-.market-card.sell-mild   { border-left: 4px solid #ff8a65; }
-.market-card.hold        { border-left: 4px solid var(--border-light); }
+.market-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-1px); }
+.market-card.buy-strong  { border-left: 3px solid var(--green); }
+.market-card.buy-watch   { border-left: 3px solid var(--green); }
+.market-card.buy-mild    { border-left: 3px solid #40c057; }
+.market-card.sell-strong { border-left: 3px solid var(--red); }
+.market-card.sell-watch  { border-left: 3px solid var(--red); }
+.market-card.sell-mild   { border-left: 3px solid #ff6b6b; }
+.market-card.hold        { border-left: 3px solid var(--border-light); }
 
 .mcard-top {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 13px 15px 11px;
-  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px; padding: 12px 13px 10px;
 }
 .mcard-icon {
-  width: 36px; height: 36px;
-  background: var(--bg-tab);
-  border: 1px solid var(--border-light);
-  border-radius: 50%;
+  width: 32px; height: 32px; background: var(--blue-dim);
+  border: 1px solid rgba(59,91,219,.15); border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 11px; color: var(--blue);
-  flex-shrink: 0;
+  font-weight: 700; font-size: 9.5px; color: var(--blue); flex-shrink: 0;
 }
 .mcard-name-wrap { flex: 1; min-width: 0; }
-.mcard-coin { font-size: 15px; font-weight: 800; letter-spacing: -.2px; }
-.mcard-name { font-size: 11.5px; color: var(--text-muted); }
-.mcard-price-wrap { text-align: right; }
-.mcard-price { font-size: 16px; font-weight: 800; letter-spacing: -.3px; }
-.mcard-change { font-size: 12.5px; font-weight: 700; margin-top: 1px; }
-.mcard-change.pos { color: var(--red); }
-.mcard-change.neg { color: var(--blue); }
+.mcard-coin { font-size: 13.5px; font-weight: 800; color: var(--text-pri); }
+.mcard-name { font-size: 10.5px; color: var(--text-muted); }
+.mcard-price-wrap { text-align: right; flex-shrink: 0; }
+.mcard-price { font-size: 14px; font-weight: 800; color: var(--text-pri); }
+.mcard-change { font-size: 11.5px; font-weight: 700; margin-top: 1px; }
+.mcard-change.pos  { color: var(--red); }
+.mcard-change.neg  { color: var(--blue); }
 .mcard-change.zero { color: var(--text-muted); }
 
-/* 신호 배지 + 점수 */
-.mcard-signal-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 9px 15px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-tab);
+/* 신호 + RSI 행 */
+.mcard-bottom {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 13px 10px; border-top: 1px solid var(--border);
+  background: var(--bg-section);
 }
 .mcard-badge {
-  font-size: 12px;
-  font-weight: 800;
-  padding: 4px 12px;
-  border-radius: 20px;
-  letter-spacing: .2px;
+  font-size: 10.5px; font-weight: 800; padding: 3px 9px;
+  border-radius: 20px; flex-shrink: 0; white-space: nowrap;
 }
-.mcard-badge.buy-strong, .mcard-badge.buy-watch  { background: var(--green-dim); color: var(--green); }
-.mcard-badge.buy-mild  { background: rgba(92,187,96,.15); color: #7ccf80; }
-.mcard-badge.sell-strong,.mcard-badge.sell-watch { background: var(--red-dim);   color: var(--red); }
-.mcard-badge.sell-mild { background: rgba(255,138,101,.15); color: #ff9e80; }
-.mcard-badge.hold      { background: var(--bg-card); color: var(--text-muted); }
-.mcard-score { font-size: 12.5px; font-weight: 600; color: var(--text-sec); }
+.mcard-badge.buy-strong,.mcard-badge.buy-watch  { background: var(--green-dim); color: #0ca678; }
+.mcard-badge.buy-mild   { background: rgba(64,192,87,.1); color: #2f9e44; }
+.mcard-badge.sell-strong,.mcard-badge.sell-watch{ background: var(--red-dim); color: var(--red); }
+.mcard-badge.sell-mild  { background: rgba(255,107,107,.1); color: #c92a2a; }
+.mcard-badge.hold       { background: var(--bg-tab); color: var(--text-muted); border: 1px solid var(--border); }
 
-/* 지표 미니 카드 */
-.mcard-inds {
-  padding: 10px 15px 11px;
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 7px;
+.mcard-rsi-wrap { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.mcard-rsi-label { font-size: 9.5px; font-weight: 700; color: var(--text-muted); flex-shrink: 0; }
+.mcard-rsi-bar {
+  flex: 1; height: 5px; background: var(--border); border-radius: 3px;
+  position: relative; overflow: hidden; min-width: 30px;
 }
-.mind {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  background: var(--bg-tab);
-  border-radius: var(--radius-sm);
-  padding: 7px 9px;
-}
-.mind-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: .4px;
-}
-.mind-value { font-size: 12.5px; font-weight: 700; }
-.mind-value.oversold  { color: var(--green); }
-.mind-value.weak      { color: #7ccf80; }
-.mind-value.neutral   { color: var(--text-sec); }
-.mind-value.strong    { color: var(--yellow); }
-.mind-value.overbought{ color: var(--red); }
-.mind-value.bullish   { color: var(--green); }
-.mind-value.bearish   { color: var(--red); }
-.mind-value.buy-zone  { color: var(--green); }
-.mind-value.sell-zone { color: var(--red); }
-.mind-value.strong-buy { color: var(--green); }
-.mind-value.strong-sell{ color: var(--red); }
-.mind-value.trend-bullish { color: var(--green); }
-.mind-value.trend-bearish { color: var(--red); }
-.mind-value.trend-neutral { color: var(--text-sec); }
+.mcard-rsi-fill { height: 100%; border-radius: 3px; transition: width .4s; }
+.mcard-rsi-fill.oversold   { background: var(--green); }
+.mcard-rsi-fill.weak       { background: #40c057; }
+.mcard-rsi-fill.neutral    { background: var(--text-muted); }
+.mcard-rsi-fill.strong     { background: var(--yellow); }
+.mcard-rsi-fill.overbought { background: var(--red); }
+.mcard-rsi-val { font-size: 11px; font-weight: 700; flex-shrink: 0; }
+.mcard-rsi-val.oversold   { color: var(--green); }
+.mcard-rsi-val.weak       { color: #40c057; }
+.mcard-rsi-val.neutral    { color: var(--text-sec); }
+.mcard-rsi-val.strong     { color: var(--yellow); }
+.mcard-rsi-val.overbought { color: var(--red); }
 
-/* 볼린저 위치 바 (마켓 카드) */
-.mcard-bb-row {
-  padding: 0 15px 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.mcard-bb-label { font-size: 10.5px; color: var(--text-muted); white-space: nowrap; }
-.mcard-bb-bar {
-  flex: 1;
-  height: 6px;
-  background: var(--bg-tab);
-  border-radius: 3px;
-  position: relative;
-}
-.mcard-bb-fill {
-  position: absolute;
-  left: 0; top: 0; height: 100%;
-  border-radius: 3px;
-  background: linear-gradient(90deg, var(--green), var(--yellow), var(--red));
-  opacity: .85;
-}
-.mcard-bb-dot {
-  position: absolute;
-  width: 11px; height: 11px;
-  background: #fff;
-  border-radius: 50%;
-  top: -2.5px;
-  transform: translateX(-50%);
-  border: 2px solid var(--bg-card);
-  transition: left .5s ease;
-}
-
-/* AI 분석 배지 */
+/* AI */
 .ai-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10.5px;
-  font-weight: 800;
-  padding: 3px 8px;
-  border-radius: 20px;
-  background: var(--blue-dim);
-  color: var(--blue);
-  letter-spacing: .3px;
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 10px; font-weight: 800; padding: 2px 7px;
+  border-radius: 20px; background: var(--blue-dim); color: var(--blue);
 }
 .ai-reason {
-  padding: 8px 15px 9px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-sec);
-  background: var(--bg-tab);
-  border-top: 1px solid var(--border);
+  padding: 6px 13px 7px; font-size: 11.5px; line-height: 1.5;
+  color: var(--text-sec); background: var(--bg-section); border-top: 1px solid var(--border);
 }
+.mcard-score { font-size: 11px; color: var(--text-muted); }
 
 /* 마켓 로딩 */
 #market-loading {
-  padding: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: var(--text-muted);
-  font-size: 13px;
+  padding: 32px; display: flex; align-items: center; justify-content: center;
+  gap: 10px; color: var(--text-muted); font-size: 12.5px;
 }
 .spinner-sm {
-  width: 18px; height: 18px;
-  border: 2px solid var(--border);
-  border-top-color: var(--green);
-  border-radius: 50%;
-  animation: spin .7s linear infinite;
+  width: 15px; height: 15px;
+  border: 2px solid var(--border); border-top-color: var(--blue);
+  border-radius: 50%; animation: spin .7s linear infinite;
 }
 
-/* ── 자동 매매 섹션 ── */
-.trading-section {
-  padding: 0 24px 28px;
-}
+/* ── 자동매매 섹션 ── */
+.trading-section { padding: 0 16px 24px; }
 .trading-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 18px 0 14px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 0 14px; border-bottom: 1px solid var(--border); margin-bottom: 14px;
 }
-.trading-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--text-pri);
-  letter-spacing: -.2px;
+.trading-title { display: flex; flex-direction: column; gap: 2px; }
+.trading-title-main {
+  font-size: 14px; font-weight: 800; color: var(--text-pri);
+  display: flex; align-items: center; gap: 8px;
 }
-.trading-title .dot-trade {
-  width: 9px; height: 9px;
-  border-radius: 50%;
-  background: var(--text-muted);
-  transition: background .3s;
+.dot-trade {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--text-muted); transition: background .3s; flex-shrink: 0;
 }
-.trading-title .dot-trade.active {
-  background: var(--green);
-  animation: pulse 1.5s infinite;
-}
-.trading-controls {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-}
+.dot-trade.active { background: var(--green); animation: pulse 1.5s infinite; }
+
+.trading-sim-wrap { display: flex; align-items: center; gap: 8px; }
 .mode-badge {
-  font-size: 11.5px;
-  font-weight: 800;
-  padding: 4px 11px;
-  border-radius: 20px;
-  letter-spacing: .4px;
+  font-size: 10.5px; font-weight: 800; padding: 3px 9px;
+  border-radius: 20px; letter-spacing: .3px;
 }
-.mode-badge.live    { background: var(--red-dim);    color: var(--red);   border: 1px solid var(--red); }
-.mode-badge.sim     { background: var(--blue-dim);   color: var(--blue);  border: 1px solid var(--blue); }
+.mode-badge.live { background: var(--red-dim);  color: var(--red);  border: 1px solid rgba(240,62,62,.3); }
+.mode-badge.sim  { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(59,91,219,.3); }
 
-.btn-trade-sim, .btn-trade-live, .btn-trade-stop, .btn-trade-hold {
-  padding: 8px 18px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
-  transition: all .15s;
-}
 .btn-trade-sim {
-  background: var(--blue-dim);
-  border: 1px solid var(--blue);
-  color: var(--blue);
+  background: var(--blue-dim); border: 1px solid rgba(59,91,219,.3);
+  color: var(--blue); padding: 6px 13px; border-radius: var(--radius-sm);
+  cursor: pointer; font-size: 12px; font-weight: 700; transition: all .15s;
 }
-.btn-trade-sim:hover    { background: var(--blue); color: #0d0f15; }
+.btn-trade-sim:hover    { background: var(--blue); color: #fff; }
 .btn-trade-sim:disabled { opacity: .4; cursor: not-allowed; }
-.btn-trade-live {
-  background: var(--green-dim);
-  border: 1px solid var(--green);
-  color: var(--green);
-}
-.btn-trade-live:hover    { background: var(--green); color: #0d0f15; }
-.btn-trade-live:disabled { opacity: .4; cursor: not-allowed; }
-.btn-trade-stop {
-  background: var(--red-dim);
-  border: 1px solid var(--red);
-  color: var(--red);
-}
-.btn-trade-stop:hover    { background: var(--red); color: #fff; }
-.btn-trade-stop:disabled  { opacity: .4; cursor: not-allowed; }
-.btn-trade-hold {
-  background: var(--yellow-dim);
-  border: 1px solid var(--yellow);
-  color: var(--yellow);
-}
-.btn-trade-hold:hover    { background: var(--yellow); color: #0d0f15; }
-.btn-trade-hold:disabled { opacity: .4; cursor: not-allowed; }
 
+/* ── 자동매매 현황 3-통계 박스 ── */
+.trade-stats-row {
+  display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 14px;
+}
+.trade-stat-box {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 13px 14px; box-shadow: var(--shadow);
+}
+.trade-stat-label {
+  font-size: 10.5px; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: .4px; margin-bottom: 5px;
+  display: flex; align-items: center; gap: 5px;
+}
+.dot-sm {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+}
+.dot-sm.green  { background: var(--green); }
+.dot-sm.yellow { background: var(--yellow); }
+.dot-sm.blue   { background: var(--blue); }
+.trade-stat-value {
+  font-size: 18px; font-weight: 800; color: var(--text-pri);
+  font-variant-numeric: tabular-nums; letter-spacing: -.3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.trade-stat-value.pos { color: var(--red); }
+.trade-stat-value.neg { color: var(--blue); }
+.trade-stat-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+/* 상태 바 */
 .trading-status-bar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-  padding: 12px 16px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  margin-bottom: 14px;
-  font-size: 13px;
-  color: var(--text-sec);
+  display: flex; align-items: center; flex-wrap: wrap; gap: 5px 10px;
+  padding: 9px 13px; background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  margin-bottom: 12px; font-size: 12px; color: var(--text-sec);
 }
 .trading-status-bar .ts-label {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .4px;
+  color: var(--text-muted); font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .4px;
 }
-.trading-status-bar .ts-msg { color: var(--text-pri); font-weight: 600; flex: 1; min-width: 160px; }
+.trading-status-bar .ts-msg { color: var(--text-pri); font-weight: 600; flex: 1; min-width: 100px; }
 
-/* ── 거래 이력 테이블 ── */
-.trade-log-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
+/* ── 테이블 래퍼 ── */
+.table-wrap {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow-x: auto; overflow-y: hidden;
+  margin-bottom: 10px; box-shadow: var(--shadow);
 }
-.trade-log-table th {
-  text-align: left;
-  padding: 9px 12px;
-  color: var(--text-muted);
-  background: var(--bg-tab);
-  border-bottom: 1px solid var(--border);
-  font-weight: 700;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: .5px;
-}
-.trade-log-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  color: var(--text-sec);
-  line-height: 1.45;
-}
-.trade-log-table tbody tr:nth-child(even) td { background: rgba(255,255,255,.015); }
-.trade-log-table tbody tr:hover td { background: var(--bg-hover); }
-.trade-log-table tr:last-child td { border-bottom: none; }
-.tlog-type-buy  { color: var(--green); font-weight: 800; }
-.tlog-type-sell { color: var(--red);   font-weight: 800; }
-.tlog-type-hold { color: var(--text-muted); }
-.tlog-sim       { font-size: 10.5px; font-weight: 700; color: var(--blue); background: var(--blue-dim); padding: 2px 7px; border-radius: 4px; }
-.tlog-live      { font-size: 10.5px; font-weight: 700; color: var(--red);  background: var(--red-dim);  padding: 2px 7px; border-radius: 4px; }
-.tlog-empty { text-align: center; padding: 32px; color: var(--text-muted); font-size: 13px; }
-
-/* ── 포지션 테이블 ── */
-.pos-section-title {
-  font-size: 12px;
-  font-weight: 800;
-  color: var(--text-sec);
-  text-transform: uppercase;
-  letter-spacing: .7px;
-  padding: 10px 0 8px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.table-title {
+  padding: 11px 14px 9px; font-size: 11.5px; font-weight: 800;
+  color: var(--text-sec); text-transform: uppercase; letter-spacing: .5px;
+  border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px;
+  background: var(--bg-card);
 }
 .pos-budget-info {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-sec);
-  margin-left: auto;
-  text-transform: none;
-  letter-spacing: 0;
+  font-size: 11.5px; font-weight: 500; color: var(--text-sec);
+  margin-left: auto; text-transform: none; letter-spacing: 0;
 }
 .pos-budget-info span { color: var(--text-pri); font-weight: 800; font-variant-numeric: tabular-nums; }
-.pos-budget-info span.profit-pos { color: var(--red);  font-weight: 800; }
-.pos-budget-info span.profit-neg { color: var(--blue); font-weight: 800; }
-.pos-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
+.pos-budget-info span.profit-pos { color: var(--red); }
+.pos-budget-info span.profit-neg { color: var(--blue); }
+
+/* ── 포지션 테이블 ── */
+.pos-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .pos-table th {
-  text-align: left;
-  padding: 9px 12px;
-  color: var(--text-muted);
-  background: var(--bg-tab);
+  text-align: left; padding: 8px 11px;
+  color: var(--text-muted); background: var(--bg-section);
   border-bottom: 1px solid var(--border);
-  font-weight: 700;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: .5px;
+  font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: .4px;
 }
 .pos-table td {
-  padding: 11px 12px;
-  border-bottom: 1px solid var(--border);
-  color: var(--text-sec);
+  padding: 10px 11px; border-bottom: 1px solid var(--border); color: var(--text-sec);
 }
 .pos-table tbody tr:hover td { background: var(--bg-hover); }
 .pos-table tr:last-child td { border-bottom: none; }
-.pos-table td.profit-pos { color: var(--red);      font-weight: 800; font-size: 15px; }
-.pos-table td.profit-neg { color: var(--blue);     font-weight: 800; font-size: 15px; }
-.pos-table td.profit-neu { color: var(--text-sec); font-weight: 800; font-size: 15px; }
+.pos-table td.profit-pos { color: var(--red);  font-weight: 800; font-size: 13.5px; }
+.pos-table td.profit-neg { color: var(--blue); font-weight: 800; font-size: 13.5px; }
+.pos-table td.profit-neu { color: var(--text-sec); font-weight: 800; font-size: 13.5px; }
+.pos-table tfoot td { border-top: 2px solid var(--border); background: var(--bg-section); }
+
+/* 코인 배지 (포지션 테이블) */
+.coin-badge {
+  display: inline-flex; align-items: center; padding: 3px 9px;
+  border-radius: 6px; font-size: 11.5px; font-weight: 800; letter-spacing: .2px;
+}
+
+/* ── 거래 이력 테이블 ── */
+.trade-log-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.trade-log-table th {
+  text-align: left; padding: 11px 14px;
+  color: var(--text-muted); background: var(--bg-section);
+  border-bottom: 1px solid var(--border);
+  font-weight: 700; font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px;
+  white-space: nowrap;
+}
+.trade-log-table td {
+  padding: 12px 14px; border-bottom: 1px solid var(--border);
+  color: var(--text-sec); vertical-align: middle;
+  white-space: nowrap;
+}
+.trade-log-table tbody tr:hover td { background: var(--bg-hover); }
+.trade-log-table tr:last-child td { border-bottom: none; }
+
+/* 구분 셀: 타입 + 수익률 + 모드 배지 — 한 줄 */
+.tlog-type-cell { display: flex; align-items: center; gap: 5px; }
+.tlog-type-buy  { color: var(--green); font-weight: 800; }
+.tlog-type-sell { color: var(--red);   font-weight: 800; }
+.tlog-type-hold { color: var(--text-muted); }
+.tlog-profit-pos { color: var(--red);  font-size: 11px; font-weight: 700; }
+.tlog-profit-neg { color: var(--blue); font-size: 11px; font-weight: 700; }
+.tlog-sim  { font-size: 9.5px; font-weight: 700; color: var(--blue); background: var(--blue-dim); padding: 2px 6px; border-radius: 4px; }
+.tlog-live { font-size: 9.5px; font-weight: 700; color: var(--red);  background: var(--red-dim);  padding: 2px 6px; border-radius: 4px; }
+.tlog-empty { text-align: center; padding: 28px; color: var(--text-muted); font-size: 12.5px; }
+.tlog-reason { white-space: nowrap; font-size: 12px; color: var(--text-sec); }
+
+/* pos-section-title 호환 */
+.pos-section-title { display: none; }
 
 /* ── 반응형 ── */
-@media (max-width: 1500px) {
-  .market-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+@media (max-width: 1600px) {
+  .panel-right { width: 660px; }
+}
+@media (max-width: 1400px) {
+  .panel-right { width: 600px; }
+}
+@media (max-width: 1200px) {
+  .panel-right { width: 520px; }
+  .trade-stat-value { font-size: 15px; }
 }
 @media (max-width: 900px) {
-  body           { overflow: auto; height: auto; }
-  .page-layout   { flex-direction: column; overflow: visible; }
-  .panel-left,
-  .panel-right   { overflow-y: visible; }
-  .panel-left    { border-right: none; border-bottom: 1px solid var(--border); }
+  body         { overflow: auto; height: auto; }
+  .page-layout { flex-direction: column; overflow: visible; }
+  .panel-left, .panel-right { overflow-y: visible; width: auto; flex: none; }
+  .panel-left  { border-right: none; border-bottom: 1px solid var(--border); }
+  header       { height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 8px; }
+  .header-brand { border-right: none; margin-right: 0; padding-right: 0; }
+  .summary-bar  { flex: none; width: 100%; order: 4; }
+  .header-right { margin-left: auto; }
 }
-@media (max-width: 460px) {
+@media (max-width: 540px) {
+  .trade-stats-row { grid-template-columns: 1fr; }
+  .market-grid { grid-template-columns: 1fr; }
   .holdings-grid { grid-template-columns: 1fr; padding: 12px; }
+  .trading-section, .market-section { padding: 0 12px 16px; }
   .guide-content { grid-template-columns: 1fr; }
-  .summary-bar   { grid-template-columns: repeat(2, 1fr); }
-  .summary-item  { padding: 12px 16px; }
-  .summary-value { font-size: 17px; }
-  .market-section { padding: 0 12px 16px; }
-  .market-grid   { grid-template-columns: 1fr; }
-  .mcard-inds    { grid-template-columns: 1fr 1fr; }
-  .trading-section { padding: 0 12px 18px; }
-  .trading-controls { width: 100%; }
-  .trading-controls button { flex: 1; min-width: 110px; }
 }
