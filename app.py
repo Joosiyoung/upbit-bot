@@ -32,6 +32,7 @@ os.makedirs(_LOG_DIR, exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
+    force=True,   # 라이브러리가 먼저 로깅을 설정해도 우리 설정으로 덮어씀
     handlers=[
         logging.handlers.RotatingFileHandler(
             os.path.join(_LOG_DIR, "bot.log"),
