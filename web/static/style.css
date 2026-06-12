@@ -5,10 +5,10 @@
 
 :root {
   /* 배경 — 단계별 깊이감 */
-  --bg-base:     #0d0f15;
-  --bg-card:     #181b25;
-  --bg-header:   #13161f;
-  --bg-tab:      #10131b;
+  --bg-base:     #000000;
+  --bg-card:     #000000;
+  --bg-header:   #000000;
+  --bg-tab:      #000000;
   --bg-tab-act:  #1f2333;
   --bg-hover:    rgba(255,255,255,.035);
 
