@@ -52,6 +52,8 @@ Flask 서버 (app.py)
 │   ├── ai_analysis.py    — Fear & Greed Index 조회 + 업비트 활성 마켓 체크
 │   ├── upbit_client.py   — 업비트 API 래퍼 (OHLCV, 현재가, 잔고, 주문, 체결 조회)
 │   ├── notifier.py       — Telegram 알림 (매수/매도/리스크 이벤트, 백그라운드 큐 전송)
+│   ├── telegram_bot.py   — Telegram 명령 봇 (/status /start_sim /stop 등 원격 제어)
+│   ├── trading_control.py — 매매 시작/중지/상태 공통 로직 (대시보드·Telegram 공유)
 │   └── config.py         — .env 값 로드 및 기술적 지표 파라미터 상수
 ├── web/                  — 대시보드 UI
 │   ├── templates/index.html
@@ -420,6 +422,29 @@ if fg and fg["value"] >= 80:
 python scripts/test_telegram.py
 ```
 
+### Telegram 명령 봇 (`core/telegram_bot.py`)
+
+폰에서 봇에게 메시지를 보내 매매를 원격 제어. 서버 기동 시 자동 시작 (미설정 시 비활성).
+
+| 명령 | 동작 |
+|------|------|
+| `/status` | 상태·잔고·포지션·수익률 요약 |
+| `/start_sim` | 시뮬레이션 시작 |
+| `/start_live` | 실거래 시작 (`/confirm` 2단계 확인 필수) |
+| `/stop` | 매매 중지 (포지션 보유 유지) |
+| `/liquidate` | 매매 중지 + 전액 청산 (`/confirm` 2단계 확인 필수) |
+| `/confirm` | 위험 명령 확인 (60초 이내) |
+| `/help` | 명령어 목록 |
+
+**보안 설계:**
+- `.env`의 `TELEGRAM_CHAT_ID`에서 온 메시지만 처리 — 타인이 봇을 찾아 명령해도 무시됨
+- 실거래 시작·전액 청산은 `/confirm` 2단계 확인 (오터치 방지)
+- 서버 재시작 시 쌓여 있던 이전 명령 전부 폐기 (오래된 `/liquidate` 재실행 사고 방지)
+- getUpdates long polling 데몬 스레드 — 매매 사이클과 완전 분리
+- 같은 토큰으로 PC·VPS 동시 구동 시 Telegram이 409 반환 → 한쪽만 켤 것 (60초 백오프 후 재시도)
+
+매매 시작/중지 로직은 `core/trading_control.py`로 분리되어 대시보드(Flask)와 Telegram 봇이 동일 코드를 공유한다 (중복 시작 가드 포함).
+
 ### VPS 24시간 운영 (PC 꺼도 봇 유지)
 
 상세 절차는 **[deploy/DEPLOY_GUIDE.md](deploy/DEPLOY_GUIDE.md)** 참조. 요약:
@@ -516,6 +541,9 @@ Oracle Cloud 무료 VPS (Ubuntu 22.04)
 | 연결 테스트 | `scripts/test_telegram.py` — 토큰/챗ID 설정 진단 |
 | 대시보드 바인딩 설정화 | `DASHBOARD_HOST` / `DASHBOARD_PORT` env 추가 (VPS에서 Tailscale IP 바인딩용, 기본 127.0.0.1 유지) |
 | VPS 배포 패키지 | `deploy/` 신설 — DEPLOY_GUIDE.md (Oracle Cloud + Tailscale 가이드), setup_vps.sh (자동 셋업), upbit-bot.service (systemd) |
+| Telegram 명령 봇 | `core/telegram_bot.py` 신설 — `/status` `/start_sim` `/start_live` `/stop` `/liquidate` 원격 제어 (chat_id 검증, 위험 명령 2단계 확인, 재시작 시 이전 명령 폐기) |
+| 시작/중지 로직 공유화 | `core/trading_control.py` 신설 — app.py 라우트에서 로직 분리, 대시보드·Telegram 공용 + **중복 시작 가드** (실행 중 재시작으로 포지션 리셋되던 위험 제거) |
+| 프로덕션 WSGI 서버 | `waitress` 도입 — Flask 개발 서버 경고 제거, 24시간 운영 안정성 (미설치 시 기존 방식 폴백) |
 
 ---
 

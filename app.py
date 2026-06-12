@@ -12,9 +12,10 @@ from core.data_builder import (
 )
 from core.trader import (
     _trading_state, _trading_lock,
-    TRADING_BLACKLIST, MAX_POSITIONS,
-    auto_trade_worker, get_risk_snapshot, save_state,
+    MAX_POSITIONS,
+    auto_trade_worker, get_risk_snapshot,
 )
+from core import trading_control
 from core.ai_analysis import (
     _ai_cache, _ai_lock,
     ai_worker,
@@ -60,6 +61,9 @@ def start_workers():
     threading.Thread(target=cache_worker,      daemon=True).start()
     threading.Thread(target=ai_worker,         daemon=True).start()
     threading.Thread(target=auto_trade_worker, daemon=True).start()
+    # Telegram 명령 봇 (미설정 시 내부에서 즉시 종료)
+    from core.telegram_bot import start_telegram_bot
+    start_telegram_bot()
 
 # ─────────────────────────────────────────────
 # 라우트
@@ -133,88 +137,9 @@ def api_refresh():
 
 @app.route('/api/trading/start', methods=['POST'])
 def api_trading_start():
-    from core.upbit_client import UpbitClient
-    from datetime import datetime as _dt
     live_mode = request.json.get("live", False) if request.is_json else False
-    now_str   = _dt.now().strftime("%H:%M:%S")
-
-    client = UpbitClient()
-
-    # 기존 보유 코인(BLACKLIST 제외)을 초기 포지션으로 가져오기
-    initial_positions = {}
-    try:
-        if client.upbit:
-            for b in client.upbit.get_balances():
-                currency = b['currency']
-                if currency == 'KRW':
-                    continue
-                ticker    = f"KRW-{currency}"
-                if ticker in TRADING_BLACKLIST:
-                    continue
-                volume    = float(b['balance'])
-                if volume <= 0:
-                    continue
-                avg_price = float(b.get('avg_buy_price', 0))
-                # avg_buy_price가 0인 경우(에어드롭·이벤트 지급 등) 현재가를 진입가로 사용
-                if avg_price <= 0:
-                    try:
-                        avg_price = client.get_current_price(ticker) or 0
-                    except Exception:
-                        pass
-                if avg_price <= 0:
-                    continue
-                # 최소주문금액 미만 dust는 슬롯을 점유시키지 않음
-                if volume * avg_price < config.MIN_ORDER_KRW:
-                    continue
-                if len(initial_positions) >= MAX_POSITIONS:
-                    break
-                initial_positions[ticker] = {
-                    "entry_price": avg_price,
-                    "amount_krw":  round(volume * avg_price),
-                    "quantity":    volume,
-                    "entry_time":  now_str,
-                    "entry_ts":    _dt.now().isoformat(),
-                    "bot_bought":  False,
-                    "slot_count":  1,
-                    "peak_price":  avg_price,
-                }
-    except Exception as e:
-        logging.warning("초기 포지션 로드 실패 (API 오류로 빈 포지션으로 시작): %s", e)
-
-    # 시뮬레이션: 현재 KRW 잔고를 가상 예산으로 사용
-    sim_krw = 0.0
-    if not live_mode:
-        try:
-            sim_krw = client.get_balance_krw()
-        except Exception:
-            sim_krw = 100_000.0  # API 오류 시 폴백
-
-    imported = len(initial_positions)
-    initial_invested = sum(p["amount_krw"] for p in initial_positions.values())
-    with _trading_lock:
-        _trading_state["enabled"]    = True
-        _trading_state["live"]       = live_mode
-        _trading_state["sim_krw"]    = sim_krw
-        _trading_state["sim_initial_total"] = sim_krw + initial_invested  # 시뮬 성과 기준점
-        _trading_state["positions"]  = initial_positions
-        _trading_state["last_check"] = None
-        _trading_state["epoch"]     += 1   # 진행 중이던 사이클의 낡은 쓰기 무효화
-        _trading_state["status_msg"] = (
-            f"실거래 활성화됨 (보유 {imported}종목 포함, 슬롯 {imported}/{MAX_POSITIONS})" if live_mode
-            else f"시뮬레이션 활성화됨 (보유 {imported}종목 포함, 가상잔고 {sim_krw:,.0f}원)"
-        )
-    save_state()
-    # 시뮬레이션 모드이면 AI 캐시 초기화 (AI 배지 숨김)
-    if not live_mode:
-        with _ai_lock:
-            _ai_cache.clear()
-    from core.notifier import notify_event
-    notify_event(
-        "▶️ 자동 매매 시작" if live_mode else "▶️ 시뮬레이션 시작",
-        f"모드: {'실거래' if live_mode else '시뮬레이션'}\n"
-        f"초기 포지션: {imported}종목 (슬롯 {imported}/{MAX_POSITIONS})"
-        + ("" if live_mode else f"\n가상잔고: {sim_krw:,.0f}원"))
-    return jsonify({"ok": True, "enabled": True, "live": live_mode, "sim_krw": sim_krw, "imported": imported})
+    result = trading_control.start_trading(live_mode)
+    return jsonify(result), (200 if result.get("ok") else 409)
 
 
 @app.route('/api/trading/stop', methods=['POST'])
@@ -223,96 +148,10 @@ def api_trading_stop():
     mode=liquidate: 봇 매수 코인 시장가 청산 후 중지 (기본)
     mode=hold:      매도 없이 추적만 종료 후 중지
     """
-    from core.upbit_client import UpbitClient
-    from datetime import datetime as _dt
-    from core.trader import _log_trade, _execute_live_sell, _sell_cooldown
-
-    data      = request.get_json(silent=True) or {}
-    mode      = data.get("mode", "liquidate")   # "liquidate" | "hold"
-    client    = UpbitClient()
-    now_str   = _dt.now().strftime("%H:%M:%S")
-
-    # 먼저 매매를 비활성화하고 epoch을 올려 진행 중인 사이클의 추가 주문을 차단
-    with _trading_lock:
-        _trading_state["enabled"]  = False
-        _trading_state["epoch"]   += 1
-        positions_snap = dict(_trading_state["positions"])
-        live_mode      = _trading_state["live"]
-
-    # 마켓 캐시에서 현재가 가져오기
-    with _market_lock:
-        market_map = {c["ticker"]: c["current"] for c in _market_cache.get("coins", [])}
-
-    sell_failed = []   # 청산 실패 종목 (포지션 유지하여 사용자에게 표시)
-
-    for ticker, pos in positions_snap.items():
-        if ticker in TRADING_BLACKLIST:
-            continue
-
-        current_price = market_map.get(ticker)
-        if current_price is None:
-            try:
-                current_price = client.get_current_price(ticker)
-            except Exception:
-                pass
-
-        entry_price = pos["entry_price"]
-        profit_pct  = (
-            (current_price - entry_price) / entry_price * 100
-            if (current_price and entry_price > 0) else 0
-        )
-
-        log_type      = "sell"
-        reason_prefix = "매매 중지 보유 유지"
-
-        if mode == "liquidate":
-            reason_prefix = "매매 중지 전액 청산"
-            if live_mode and client.upbit:
-                ok, _qty, err = _execute_live_sell(client, ticker, pos["quantity"])
-                if not ok:
-                    sell_failed.append(ticker)
-                    log_type      = "sell_fail"
-                    reason_prefix = f"청산 실패 [{err}]"
-                    logging.warning("청산 매도 실패 [%s]: %s", ticker, err)
-                else:
-                    with _trading_lock:
-                        _sell_cooldown[ticker] = _dt.now()   # 청산 후 즉시 재매수 방지
-        else:
-            # hold 모드: 실제 매도 없이 추적만 종료 → sell 로 기록하지 않음
-            log_type = "hold"
-
-        _log_trade({
-            "time":       now_str,
-            "type":       log_type,
-            "ticker":     ticker,
-            "reason":     f"{reason_prefix} ({profit_pct:+.1f}%)",
-            "price":      current_price or entry_price,
-            "amount":     pos["amount_krw"],
-            "profit_pct": round(profit_pct, 2),
-            "live":       live_mode,
-        })
-
-    if mode == "liquidate":
-        if sell_failed:
-            stop_msg = f"자동 매매 중지됨 (청산 실패 {len(sell_failed)}종목: {', '.join(sell_failed)} — 수동 확인 필요)"
-        else:
-            stop_msg = "자동 매매 중지됨 (포지션 청산 완료)"
-    else:
-        stop_msg = "자동 매매 중지됨 (포지션 보유 유지)"
-
-    with _trading_lock:
-        # 청산 실패 종목은 포지션에 남겨 두어 UI에서 확인 가능하게 함
-        _trading_state["positions"]  = {
-            t: p for t, p in _trading_state["positions"].items() if t in sell_failed
-        }
-        _trading_state["status_msg"] = stop_msg
-    save_state()
-    # 매매 중지 시 AI 캐시 초기화
-    with _ai_lock:
-        _ai_cache.clear()
-    from core.notifier import notify_event
-    notify_event("⏹️ 자동 매매 중지", stop_msg)
-    return jsonify({"ok": True, "enabled": False, "sell_failed": sell_failed})
+    data   = request.get_json(silent=True) or {}
+    mode   = data.get("mode", "liquidate")   # "liquidate" | "hold"
+    result = trading_control.stop_trading(mode)
+    return jsonify(result)
 
 
 @app.route('/api/trading/status')
@@ -367,5 +206,13 @@ if __name__ == '__main__':
     start_workers()
     # 대시보드에 인증이 없으므로 공인 IP(0.0.0.0)에 직접 바인딩하지 말 것.
     # VPS에서는 DASHBOARD_HOST에 Tailscale IP(100.x.x.x)를 지정해 tailnet에서만 접속.
-    app.run(host=config.DASHBOARD_HOST, port=config.DASHBOARD_PORT,
-            debug=False, threaded=True)
+    try:
+        # waitress: 24시간 운영용 프로덕션 WSGI 서버 (Flask 개발 서버 대체)
+        from waitress import serve
+        logging.info("대시보드 시작 (waitress): http://%s:%d",
+                     config.DASHBOARD_HOST, config.DASHBOARD_PORT)
+        serve(app, host=config.DASHBOARD_HOST, port=config.DASHBOARD_PORT, threads=8)
+    except ImportError:
+        logging.warning("waitress 미설치 — Flask 개발 서버로 실행 (pip install waitress 권장)")
+        app.run(host=config.DASHBOARD_HOST, port=config.DASHBOARD_PORT,
+                debug=False, threaded=True)

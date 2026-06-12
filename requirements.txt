@@ -1,4 +1,5 @@
 flask>=3.0.0
+waitress>=3.0.0
 pyupbit==0.2.33
 pandas>=1.5.0
 numpy>=1.23.0
