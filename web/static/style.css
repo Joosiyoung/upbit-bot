@@ -185,7 +185,10 @@ header {
   flex: 1; min-width: 0; overflow-y: auto; border-right: 1px solid var(--border);
 }
 .panel-right {
-  width: 720px; flex-shrink: 0; overflow-y: auto; background: var(--bg-base);
+  width: 720px; flex-shrink: 0;
+  overflow: hidden;            /* 패널 전체 스크롤 제거 */
+  background: var(--bg-base);
+  display: flex; flex-direction: column;
 }
 .panel-left::-webkit-scrollbar,
 .panel-right::-webkit-scrollbar { width: 5px; }
@@ -481,7 +484,12 @@ footer {
 }
 
 /* ── 자동매매 섹션 ── */
-.trading-section { padding: 0 16px 24px; }
+.trading-section {
+  padding: 0 16px;
+  flex: 1; min-height: 0;       /* 남은 높이 모두 차지 */
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
 .trading-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 16px 0 14px; border-bottom: 1px solid var(--border); margin-bottom: 14px;
@@ -627,6 +635,17 @@ footer {
 .tlog-empty { text-align: center; padding: 28px; color: var(--text-muted); font-size: 12.5px; }
 .tlog-reason { white-space: nowrap; font-size: 12px; color: var(--text-sec); }
 
+/* 거래 이력 래퍼만 스크롤 */
+#trade-log-wrap {
+  flex: 1; min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+#trade-log-wrap::-webkit-scrollbar { width: 5px; height: 5px; }
+#trade-log-wrap::-webkit-scrollbar-track { background: transparent; }
+#trade-log-wrap::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+
 /* pos-section-title 호환 */
 .pos-section-title { display: none; }
 
@@ -644,7 +663,9 @@ footer {
 @media (max-width: 900px) {
   body         { overflow: auto; height: auto; }
   .page-layout { flex-direction: column; overflow: visible; }
-  .panel-left, .panel-right { overflow-y: visible; width: auto; flex: none; }
+  .panel-left, .panel-right { overflow: visible; width: auto; flex: none; }
+  .trading-section { overflow: visible; flex: none; }
+  #trade-log-wrap { flex: none; max-height: 400px; }
   .panel-left  { border-right: none; border-bottom: 1px solid var(--border); }
   header       { height: auto; flex-wrap: wrap; padding: 12px 16px; gap: 8px; }
   .header-brand { border-right: none; margin-right: 0; padding-right: 0; }
