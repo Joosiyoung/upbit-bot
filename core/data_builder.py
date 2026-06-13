@@ -253,7 +253,7 @@ def build_market_data():
             # EMA50(adjust=False)·MACD(26) 수렴에 봉 수가 충분해야 함 — 60개로는 시드 편향 잔존
             df_1d  = client.get_ohlcv(ticker, "day",      count=200)
 
-            current = client.get_current_price(ticker)
+            current = client.get_current_price(ticker, warn=False)
             if not current or df_1m.empty:
                 continue
 

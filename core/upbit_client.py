@@ -30,13 +30,22 @@ class UpbitClient:
             logging.warning("OHLCV 조회 실패 [%s %s]: %s", ticker, interval, e)
             return pd.DataFrame()
 
-    def get_current_price(self, ticker: str) -> float:
-        """현재가 조회"""
+    def get_current_price(self, ticker: str, warn: bool = True) -> float:
+        """현재가 조회
+
+        warn=False: 시장 스캔(거래대금 톱20)처럼 실패가 양성(skip만 함)인 경로용.
+        상장폐지·신규 상장 직후 등으로 일부 티커가 'Code not found'를 반환하는데,
+        매 사이클(30초) WARNING으로 찍히면 로그가 도배돼 진짜 경고가 묻힌다.
+        보유 코인 가격 조회 등 실패가 유의미한 경로는 warn=True(기본)를 유지한다.
+        """
         try:
             price = pyupbit.get_current_price(ticker)
             return price if price else 0.0
         except Exception as e:
-            logging.warning("현재가 조회 실패 [%s]: %s", ticker, e)
+            if warn:
+                logging.warning("현재가 조회 실패 [%s]: %s", ticker, e)
+            else:
+                logging.debug("현재가 조회 실패(스캔, skip) [%s]: %s", ticker, e)
             return 0.0
 
     def get_balance_krw(self) -> float:
