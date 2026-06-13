@@ -103,11 +103,8 @@ def start_trading(live_mode: bool) -> dict:
         )
     save_state()
 
-    # 시뮬레이션 모드이면 AI 캐시 초기화 (AI 배지 숨김) — lazy import (순환 방지)
-    if not live_mode:
-        from core.ai_analysis import _ai_cache, _ai_lock
-        with _ai_lock:
-            _ai_cache.clear()
+    # 주의: _ai_cache(F&G·활성마켓)는 비우지 않는다 — 비우면 워커가 다시 채울 때까지
+    # (최대 5분) F&G 매수 게이트와 상장폐지 감지가 공백이 되어 리스크 보호가 약화됨.
 
     notifier.notify_event(
         "▶️ 자동 매매 시작" if live_mode else "▶️ 시뮬레이션 시작",
@@ -209,10 +206,8 @@ def stop_trading(mode: str = "liquidate") -> dict:
         _trading_state["status_msg"] = stop_msg
     save_state()
 
-    # 매매 중지 시 AI 캐시 초기화 — lazy import (순환 방지)
-    from core.ai_analysis import _ai_cache, _ai_lock
-    with _ai_lock:
-        _ai_cache.clear()
+    # 주의: _ai_cache(F&G·활성마켓)는 중지 시에도 비우지 않는다 — 다음 시작 시
+    # 게이트 공백을 피하고, 워커가 계속 갱신하도록 둔다.
 
     notifier.notify_event("⏹️ 자동 매매 중지", stop_msg)
     return {"ok": True, "enabled": False, "sell_failed": sell_failed}
@@ -270,7 +265,8 @@ def status_summary() -> str:
             current = market_map.get(ticker)
             total_invested += amount
             if current and entry > 0:
-                net = current * (1 - FEE_RATE) if live_mode else current
+                # 시뮬·실거래 동일 회계: 매도 수수료 차감 실수령 기준 (대시보드와 일치)
+                net = current * (1 - FEE_RATE)
                 pct = (net - entry) / entry * 100
                 total_value += amount * (1 + pct / 100)
                 emoji = "📈" if pct >= 0 else "📉"

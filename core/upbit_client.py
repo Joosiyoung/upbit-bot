@@ -76,6 +76,26 @@ class UpbitClient:
         jwt_token = jwt.encode(payload, config.SECRET_KEY, algorithm="HS256")
         return {"Authorization": f"Bearer {jwt_token}"}
 
+    @staticmethod
+    def _throttle_from_headers(resp) -> None:
+        """업비트 Remaining-Req 헤더로 잔여 요청 한도가 임박하면 짧게 대기.
+        형식 예: 'group=order; min=1799; sec=4'. sec(초당 잔여)이 1 이하면 백오프."""
+        rr = resp.headers.get("Remaining-Req") or resp.headers.get("remaining-req")
+        if not rr:
+            return
+        try:
+            parts = {}
+            for seg in rr.split(";"):
+                seg = seg.strip()
+                if "=" in seg:
+                    k, v = seg.split("=", 1)
+                    parts[k.strip()] = v.strip()
+            sec = int(parts.get("sec", "99"))
+            if sec <= 1:
+                time.sleep(0.3)
+        except Exception:
+            pass
+
     def _order_direct(self, query: dict) -> dict:
         """업비트 REST API 직접 호출 - 주문 공통 (에러 상세 반환)"""
         if not config.ACCESS_KEY or not config.SECRET_KEY:
@@ -87,6 +107,7 @@ class UpbitClient:
                 headers=self._auth_headers(query),
                 timeout=10,
             )
+            self._throttle_from_headers(res)
             result = res.json()
             result["_http_status"] = res.status_code
             # HTTP 4xx/5xx 이면서 error/uuid 키가 없는 경우 명시적 오류 구조 추가
@@ -135,6 +156,7 @@ class UpbitClient:
                     headers=self._auth_headers(query),
                     timeout=5,
                 )
+                self._throttle_from_headers(res)
                 if res.status_code != 200:
                     time.sleep(0.5)
                     continue

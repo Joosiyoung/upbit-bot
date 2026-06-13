@@ -13,13 +13,10 @@ from core.data_builder import (
 from core.trader import (
     _trading_state, _trading_lock,
     MAX_POSITIONS,
-    auto_trade_worker, get_risk_snapshot,
+    auto_trade_worker, get_risk_snapshot, compute_performance,
 )
 from core import trading_control
-from core.ai_analysis import (
-    _ai_cache, _ai_lock,
-    ai_worker,
-)
+from core.ai_analysis import ai_worker
 from core import config
 
 # ─────────────────────────────────────────────
@@ -84,24 +81,6 @@ def api_analysis():
 def api_market():
     with _market_lock:
         data = dict(_market_cache)
-    with _ai_lock:
-        ai_snap = dict(_ai_cache)
-
-    ai_updated_at = ai_snap.pop("_updated_at", None)
-
-    if ai_snap and data.get("coins"):
-        merged = []
-        for c in data["coins"]:
-            ai = ai_snap.get(c["ticker"])
-            if ai:
-                c = {**c,
-                     "action_class": ai["action_class"],
-                     "action_text":  ai["action_text"],
-                     "ai_reason":    ai["ai_reason"],
-                     "ai_analyzed":  True}
-            merged.append(c)
-        data = {**data, "coins": merged, "ai_updated_at": ai_updated_at}
-
     return jsonify(data)
 
 @app.route('/api/refresh', methods=['POST'])
@@ -155,6 +134,12 @@ def api_trading_stop():
     return jsonify(result)
 
 
+@app.route('/api/performance')
+def api_performance():
+    """trade_history.jsonl 누적 실현 성과 (시뮬/실거래 분리)"""
+    return jsonify(compute_performance())
+
+
 @app.route('/api/trading/status')
 def api_trading_status():
     with _market_lock:
@@ -177,15 +162,14 @@ def api_trading_status():
             "log":        list(_trading_state["log"]),
         }
 
-    live_mode = state_snap["live"]
     positions_out = {}
     for ticker, pos in positions_raw.items():
         current = market_map.get(ticker)
         profit_pct = None
         if current and pos["entry_price"] > 0:
-            # 실거래: 매도 수수료(0.05%) 차감 후 실수령 기준 수익률
-            # 시뮬: 매도 수수료는 sim_krw 차감으로 처리되므로 현재가 그대로 사용
-            net_current = current * 0.9995 if live_mode else current
+            # 시뮬·실거래 동일 회계: 매도 수수료(0.05%) 차감 실수령 기준 수익률.
+            # trader.py Phase 1 실현 수익률(net_sell_price 기준)과 표시 기준을 일치시킴.
+            net_current = current * (1 - 0.0005)
             profit_pct = round((net_current - pos["entry_price"]) / pos["entry_price"] * 100, 2)
         positions_out[ticker] = {**pos, "current_price": current, "profit_pct": profit_pct}
 

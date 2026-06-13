@@ -61,6 +61,7 @@ Flask 서버 (app.py)
 ├── scripts/              — 보조 스크립트
 │   ├── start_server.py   — 서버 시작 (포트 5000 중복 프로세스 정리 후 기동)
 │   ├── restart_helper.py — restart.bat에서 호출하는 프로세스 관리 헬퍼
+│   ├── backtest.py       — 백테스터 (라이브 점수·청산 룰 재현, 승률·기대값·MDD 산출)
 │   └── test_telegram.py  — Telegram 알림 연결 테스트
 ├── deploy/               — VPS 24시간 운영 배포 파일
 │   ├── DEPLOY_GUIDE.md       — Oracle Cloud + Tailscale + systemd 배포 가이드
@@ -107,6 +108,9 @@ Flask 서버 (app.py)
 | `MAX_SLOTS_PER_TICKER` | `2` | 한 종목이 점유 가능한 최대 슬롯 수 |
 | `BUY_FAIL_LIMIT` | `3` | 연속 매수 실패 허용 횟수 |
 | `BUY_FAIL_COOLDOWN_MIN` | `30` | 매수 실패 한도 초과 시 해당 종목 매수 금지 시간 (분) |
+| `BUY_CONFIRM_TICKS` | `1` | 신규 매수 진입에 필요한 연속 사이클 수(디바운스). 1=즉시. 2+면 score≥8이 연속 유지돼야 진입 → 미완성 캔들 스파이크 진입 방지 |
+| `EQUAL_WEIGHT_SIZING` | `True` | `True`면 코인당 매수금액을 (총자산/MAX_POSITIONS)로 제한해 단일 코인 집중 방지. `False`면 종전 방식(잔고/빈슬롯) |
+| `ADD_BUY_ENABLED` | `True` | 추가매수(Phase 2.5) 활성화 스위치. `False`면 추가매수 전면 비활성 |
 | `FEAR_GREED_GREED_MAX` | `80` | F&G 극단 탐욕 임계값 (이상이면 신규 매수 차단) |
 | `FEAR_GREED_FEAR_MIN` | `20` | F&G 극단 공포 임계값 (이하면 신규 매수 차단) |
 | `TELEGRAM_BOT_TOKEN` | — | Telegram 봇 토큰 (@BotFather 발급) — 미설정 시 알림 비활성 |
@@ -552,6 +556,35 @@ Oracle Cloud 무료 VPS (Ubuntu 22.04)
 | 보유 코인 매도 신호 공백 수정 | `trader.py` market_map 폴백 — 보유 코인이 거래량 톱20에서 밀리거나 수집 실패 시 `action_class: None`이 들어가 sell-strong 지표 매도가 조용히 비활성화되던 결함 → holdings 캐시의 action_class로 보완 (보수적 가중치라 매도 보호용 안전) |
 | 일봉 데이터 수렴 보강 | `data_builder.py` 일봉 조회 count 60 → 200 — EMA50(adjust=False)·MACD(26) 시드 편향 제거, API 비용 동일 |
 | 검토 결론 (수정 불요 판정) | 차트 지표만으로 충분 (호가창·펀딩비·뉴스 추가는 비용 대비 효과 없음), 매도는 가격 규칙(익절/손절/트레일링/타임스탑)이 실시간 가격으로 주도하는 현 구조 유지, score_signal 매수 편향·미완성 캔들 리페인팅·매수 수수료 미반영 등은 인지하되 현상 유지 |
+
+### 2026-06-13 고도화 (전용 에이전트 진단 + 백테스트 기반)
+
+**`.claude/agents/bot-enhancer.md`** 진단 에이전트로 코드베이스를 정밀 분석하고, **`scripts/backtest.py`** 백테스터로 검증한 뒤 적용.
+
+| 분류 | 항목 | 내용 |
+|------|------|------|
+| 안전 수정 | 리스크 게이트 공백 제거 | 매매 시작/중지 시 `_ai_cache.clear()` 호출을 제거 — 종전엔 F&G 매수 게이트·상장폐지 감지 캐시가 비워져 워커 재적재(최대 5분)까지 공백이 생겼음 |
+| 안전 수정 | 죽은 AI 머지 코드 제거 | Haiku 제거 후 항상 None이던 `app.py`의 티커별 AI 병합 블록 + `app.js` AI 배지/`ai_reason` 렌더 제거 |
+| 안전 수정 | 시뮬 회계 표시 통일 | 미실현 손익 표시를 시뮬·실거래 모두 매도 수수료 차감 기준으로 일치(대시보드·Telegram `/status`). 종전엔 시뮬만 무수수료라 약간 낙관적 |
+| 검증 인프라 | 백테스터 | `scripts/backtest.py` — 라이브와 동일한 `score_signal`·지표로 진입(score≥8), trader.py Phase 1 우선순위로 청산(익절/손절/트레일링/매도신호/time-stop), 왕복 수수료 반영. 승률·거래당 기대값·MDD·청산사유 분포 출력. (일봉은 완성봉만 사용해 룩어헤드 제거, 1분봉 항목 생략) |
+| 검증 인프라 | 누적 성과 API | `/api/performance` — `trade_history.jsonl` 집계(시뮬/실거래 분리: 건수·승률·실현손익·평균·최고/최저). 대시보드 매매 패널에 한 줄 표시 |
+| 로직(게이트) | 진입 디바운스 | `BUY_CONFIRM_TICKS` — score≥8 연속 N사이클 유지 후 진입(리페인팅 스파이크 차단). **백테스트상 2+는 개선 없어 기본 1(현행 유지)** |
+| 로직(게이트) | 포지션 사이징 캡 | `EQUAL_WEIGHT_SIZING`(기본 True) — 코인당 매수금액을 총자산/MAX_POSITIONS로 캡해 단일 코인 집중(빈 슬롯 1개에 전액 몰빵) 방지 |
+| 로직(게이트) | 추가매수 스위치 | `ADD_BUY_ENABLED`(기본 True) — Phase 2.5 추가매수 on/off |
+| 운영 | API 호출 절감 | Phase 2.5 잔고 재조회를 (Phase 2 잔고 − 매수액) 추정으로 대체해 실거래 사이클당 1콜 절감 |
+| 운영 | rate-limit 백오프 | `upbit_client`가 주문·체결조회 응답의 `Remaining-Req` 헤더를 읽어 초당 잔여 ≤1이면 0.3초 백오프 |
+
+> **백테스트 발견 (요주의):** 최근 90일·10종목 구간에서 현 진입 룰(score≥8)은 **거래당 기대값이 음수**(약 -0.6%)였다. 익절(+5%)은 드물게 발동하고 손절·매도신호가 지배해 보상:위험이 비대칭이었다. 디바운스는 개선 효과가 없었다. **단일 구간(알트 약세장 포함 가능)·1분봉 생략·종가 청산이라는 한계가 있으나**, 실거래 전 `scripts/backtest.py`로 파라미터(임계점수·익손절폭)를 재검증할 것을 강력 권고. 이번 변경 중 사이징 캡은 이 비대칭 손실을 줄이는 방향의 안전장치다.
+
+#### 백테스터 사용법
+```bash
+# 기본 10종목 90일, 즉시 진입
+python scripts/backtest.py --days 90 --confirm 1
+# 디바운스 효과 비교 (연속 2사이클 확인 후 진입)
+python scripts/backtest.py --days 90 --confirm 2
+# 특정 종목 + 장중 고저 터치로 손절/익절 판정
+python scripts/backtest.py --tickers KRW-BTC,KRW-ETH --days 60 --intrabar
+```
 
 ---
 

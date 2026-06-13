@@ -60,6 +60,7 @@ SELL_COOLDOWN_MIN  = config.SELL_COOLDOWN_MIN  # 매도 후 재매수 금지 시
 
 _sell_cooldown: dict[str, datetime] = {}   # ticker → 매도 시각
 _buy_fail: dict[str, dict] = {}            # ticker → {"count": int, "until": datetime|None}
+_buy_confirm: dict[str, int] = {}          # ticker → 연속 score≥8 사이클 수 (진입 디바운스용)
 
 # 자동 매매 절대 제외 코인 (보유 중이므로 매수·매도 금지)
 TRADING_BLACKLIST = {"KRW-XRP", "KRW-CRO", "KRW-RVN"}
@@ -230,6 +231,52 @@ def get_risk_snapshot() -> dict:
         snap["buy_block_reason"] = _buy_block_reason_locked()
     snap["market_age_sec"] = _market_age_sec()
     return snap
+
+
+def _perf_bucket(sells: list) -> dict:
+    """매도 체결 목록 → 성과 지표 집계."""
+    n = len(sells)
+    if n == 0:
+        return {"n": 0, "win_rate": 0.0, "realized_krw": 0.0,
+                "avg_profit_pct": 0.0, "best_pct": 0.0, "worst_pct": 0.0}
+    pcts = [float(s.get("profit_pct") or 0) for s in sells]
+    realized = sum(float(s.get("amount") or 0) * p / 100.0 for s, p in zip(sells, pcts))
+    wins = sum(1 for p in pcts if p > 0)
+    return {
+        "n":              n,
+        "win_rate":       round(wins / n * 100, 1),
+        "realized_krw":   round(realized),
+        "avg_profit_pct": round(sum(pcts) / n, 2),
+        "best_pct":       round(max(pcts), 2),
+        "worst_pct":      round(min(pcts), 2),
+    }
+
+
+def compute_performance() -> dict:
+    """trade_history.jsonl 전체를 읽어 누적 실현 성과를 집계 (시뮬/실거래 분리)."""
+    sells_live, sells_sim = [], []
+    try:
+        if os.path.exists(TRADE_LOG_FILE):
+            with open(TRADE_LOG_FILE, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        e = json.loads(line)
+                    except Exception:
+                        continue
+                    if e.get("type") != "sell":
+                        continue
+                    (sells_live if e.get("live") else sells_sim).append(e)
+    except Exception as ex:
+        logging.warning("성과 집계 실패: %s", ex)
+
+    return {
+        "all":  _perf_bucket(sells_live + sells_sim),
+        "live": _perf_bucket(sells_live),
+        "sim":  _perf_bucket(sells_sim),
+    }
 
 
 def _cycle_active(epoch: int) -> bool:
@@ -569,7 +616,16 @@ def run_auto_trade():
 
     used_slots      = sum(p.get("slot_count", 1) for p in current_positions.values())
     available_slots = MAX_POSITIONS - used_slots
-    per_coin        = krw_balance / available_slots if available_slots > 0 else 0
+    # 포지션 사이징: 기본은 잔고/빈슬롯 균등. EQUAL_WEIGHT_SIZING이면 코인당 금액을
+    # (총자산/MAX_POSITIONS)로 캡 — 빈 슬롯 1개에 잔고 전액이 몰리는 집중 리스크 방지.
+    if available_slots > 0:
+        per_coin = krw_balance / available_slots
+        if config.EQUAL_WEIGHT_SIZING:
+            invested_now = sum(p.get("amount_krw", 0) for p in current_positions.values())
+            equity_target = (krw_balance + invested_now) / MAX_POSITIONS
+            per_coin = min(per_coin, equity_target)
+    else:
+        per_coin = 0
 
     # Fear & Greed 양극단 모두 신규 매수 차단 (lazy import)
     from core.ai_analysis import get_fear_greed
@@ -591,12 +647,23 @@ def run_auto_trade():
         age_txt = f"{market_age:.0f}초" if market_age is not None else "알 수 없음"
         skip_buy_reason = f"시장 데이터 노후 ({age_txt}) — 매수 보류"
 
+    # 진입 디바운스 카운터 갱신: 강한 매수 신호(score≥8)를 연속 유지한 사이클 수를 센다.
+    # BUY_CONFIRM_TICKS사이클 이상 유지된 후보만 진입 → 미완성 캔들의 순간 스파이크 진입 방지.
+    signal_set = {c["ticker"] for c in market_coins
+                  if c.get("action_class") == "buy-strong" and c.get("total_score", 0) >= 8}
+    for tk in list(_buy_confirm.keys()):
+        if tk not in signal_set:
+            del _buy_confirm[tk]
+    for tk in signal_set:
+        _buy_confirm[tk] = _buy_confirm.get(tk, 0) + 1
+
     candidates = []
     if skip_buy_reason is None:
         candidates = sorted(
             [c for c in market_coins
              if c.get("action_class") == "buy-strong"
              and c.get("total_score", 0) >= 8
+             and _buy_confirm.get(c["ticker"], 0) >= config.BUY_CONFIRM_TICKS
              and c["ticker"] not in current_positions
              and c["ticker"] not in TRADING_BLACKLIST
              and not _buy_banned(c["ticker"], now_dt)
@@ -607,6 +674,7 @@ def run_auto_trade():
         )
 
     bought_any = False
+    phase2_spent = 0.0   # 이번 사이클 Phase 2 매수 총액 (Phase 2.5 잔고 추정용)
 
     # 조건을 넘는 후보를 빈 슬롯만큼 한 번에 매수 (총 보유 5개 상한)
     if available_slots > 0 and candidates and per_coin >= MIN_ORDER_KRW:
@@ -663,6 +731,8 @@ def run_auto_trade():
                 if not live_mode:
                     _trading_state["sim_krw"] = max(0.0, _trading_state["sim_krw"] - amount * (1 + FEE_RATE))
                 _save_state_locked()
+            _buy_confirm.pop(ticker, None)   # 진입 완료 → 디바운스 카운터 리셋
+            phase2_spent += amount
             bought_any = True
 
     # ─── Phase 2.5: 추가매수 (마지막 매수 1시간 경과 + 강한 매수 신호 + 수익 구간) ───
@@ -672,17 +742,19 @@ def run_auto_trade():
     used_slots2     = sum(p.get("slot_count", 1) for p in positions_for_add.values())
     remaining_slots = MAX_POSITIONS - used_slots2
 
-    if remaining_slots > 0 and skip_buy_reason is None:
+    if config.ADD_BUY_ENABLED and remaining_slots > 0 and skip_buy_reason is None:
         if live_mode:
-            try:
-                krw2 = client.get_balance_krw()
-            except Exception:
-                krw2 = 0.0
+            # Phase 2 직후 잔고 = Phase 2 재조회분 - 이번 사이클 매수액 (API 재호출 절약)
+            krw2 = max(0.0, krw_balance - phase2_spent)
         else:
             with _trading_lock:
                 krw2 = _trading_state["sim_krw"]
 
         per_coin2 = krw2 / remaining_slots if remaining_slots > 0 else 0
+        # 사이징 캡: 추가매수도 코인당 (총자산/MAX_POSITIONS) 상한 적용
+        if config.EQUAL_WEIGHT_SIZING:
+            invested2 = sum(p.get("amount_krw", 0) for p in positions_for_add.values())
+            per_coin2 = min(per_coin2, (krw2 + invested2) / MAX_POSITIONS)
 
         for ticker, pos in list(positions_for_add.items()):
             if remaining_slots <= 0:

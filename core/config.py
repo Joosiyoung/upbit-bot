@@ -50,6 +50,23 @@ MAX_SLOTS_PER_TICKER = int(os.getenv("MAX_SLOTS_PER_TICKER",   "2"))    # 한 �
 BUY_FAIL_LIMIT        = int(os.getenv("BUY_FAIL_LIMIT",        "3"))   # 연속 매수 실패 허용 횟수
 BUY_FAIL_COOLDOWN_MIN = int(os.getenv("BUY_FAIL_COOLDOWN_MIN", "30"))  # 실패 한도 초과 시 해당 종목 매수 금지 시간 (분)
 
+# ─── 진입 디바운스 (리페인팅 방지) ───
+# 신규 매수 진입에 필요한 연속 매매 사이클 수. 1=즉시 진입(현행). 2+면 score≥8이
+# 연속 N사이클 유지돼야 진입 → 미완성 캔들의 순간 스파이크 진입을 거른다.
+# 주의: scripts/backtest.py 측정 결과 현 룰에서는 2+가 개선이 없어 기본 1로 둔다.
+BUY_CONFIRM_TICKS = int(os.getenv("BUY_CONFIRM_TICKS", "1"))
+
+# ─── 포지션 사이징 ───
+# True: 코인당 매수금액을 (총자산 / MAX_POSITIONS)로 제한해 단일 코인 집중을 방지.
+#       (빈 슬롯이 1개 남아도 잔고 전액을 한 코인에 몰지 않음)
+# False: 종전 방식 — 잔고 / 빈 슬롯 수로 균등 분할(마지막 슬롯이면 전액).
+EQUAL_WEIGHT_SIZING = os.getenv("EQUAL_WEIGHT_SIZING", "True").lower() == "true"
+
+# ─── 추가매수 (Phase 2.5) on/off ───
+# 추가매수 자체를 끄는 스위치. 백테스트로 기대값을 검증하기 전 비활성화하고 싶을 때 사용.
+# 기본 True(현행 동작 유지).
+ADD_BUY_ENABLED = os.getenv("ADD_BUY_ENABLED", "True").lower() == "true"
+
 # 기술적 지표 파라미터
 RSI_PERIOD = 14
 

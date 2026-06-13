@@ -224,9 +224,6 @@ function buildMarketCard(c) {
   const chgStr   = (c.change_24h >= 0 ? '+' : '') + c.change_24h.toFixed(2) + '%';
   const rsiClass = c.rsi_class_1h || 'neutral';
   const rsiVal   = c.rsi_1h != null ? c.rsi_1h : 50;
-  const aiBadge  = c.ai_analyzed ? ' <span class="ai-badge">✦ AI</span>' : '';
-  const aiRow    = c.ai_analyzed && c.ai_reason
-    ? `<div class="ai-reason">✦ ${c.ai_reason}</div>` : '';
 
   return `
   <div class="market-card ${c.action_class}">
@@ -242,7 +239,7 @@ function buildMarketCard(c) {
       </div>
     </div>
     <div class="mcard-bottom">
-      <span class="mcard-badge ${c.action_class}">${c.action_text}${aiBadge}</span>
+      <span class="mcard-badge ${c.action_class}">${c.action_text}</span>
       <div class="mcard-rsi-wrap">
         <span class="mcard-rsi-label">RSI</span>
         <div class="mcard-rsi-bar">
@@ -514,10 +511,34 @@ async function fetchTradingStatus() {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     renderTradingStatus(data);
+    fetchPerformance(data.live);
   } catch(e) {
     document.getElementById('trade-status-msg').textContent = '연결 오류: ' + e.message;
     console.error('fetchTradingStatus error:', e);
   }
+}
+
+// 누적 실현 성과 (trade_history.jsonl 집계) — 현재 모드 기준 표시
+async function fetchPerformance(live) {
+  try {
+    const res = await fetch('/api/performance');
+    if (!res.ok) return;
+    const p = await res.json();
+    const b = live ? p.live : p.sim;
+    const el = document.getElementById('perf-summary');
+    if (!b || b.n === 0) {
+      el.textContent = (live ? '실거래' : '시뮬') + ' 실현 매매 없음';
+      el.className = '';
+      return;
+    }
+    const krw = b.realized_krw;
+    const krwStr = (krw >= 0 ? '+' : '') + Math.round(krw).toLocaleString('ko-KR') + '원';
+    el.innerHTML =
+      `${live ? '실거래' : '시뮬'} <b>${b.n}건</b> · 승률 <b>${b.win_rate}%</b> · ` +
+      `실현 <b class="${krw >= 0 ? 'profit-pos' : 'profit-neg'}">${krwStr}</b> · ` +
+      `평균 <span class="${b.avg_profit_pct >= 0 ? 'profit-pos' : 'profit-neg'}">${b.avg_profit_pct >= 0 ? '+' : ''}${b.avg_profit_pct}%</span> · ` +
+      `최고 +${b.best_pct}% / 최저 ${b.worst_pct}%`;
+  } catch(e) { /* 성과 표시는 보조 정보 — 실패해도 무시 */ }
 }
 
 function setStartBtnsDisabled(disabled) {
