@@ -248,7 +248,6 @@ function buildMarketCard(c) {
         <span class="mcard-rsi-val ${rsiClass}">${rsiVal}</span>
       </div>
     </div>
-    ${aiRow}
   </div>`;
 }
 
