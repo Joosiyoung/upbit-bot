@@ -185,7 +185,7 @@ header {
   flex: 1; min-width: 0; overflow-y: auto; border-right: 1px solid var(--border);
 }
 .panel-right {
-  width: 720px; flex-shrink: 0;
+  width: 820px; flex-shrink: 0;
   overflow: hidden;            /* 패널 전체 스크롤 제거 */
   background: var(--bg-base);
   display: flex; flex-direction: column;
@@ -651,13 +651,13 @@ footer {
 
 /* ── 반응형 ── */
 @media (max-width: 1600px) {
-  .panel-right { width: 660px; }
+  .panel-right { width: 760px; }
 }
 @media (max-width: 1400px) {
-  .panel-right { width: 600px; }
+  .panel-right { width: 700px; }
 }
 @media (max-width: 1200px) {
-  .panel-right { width: 520px; }
+  .panel-right { width: 620px; }
   .trade-stat-value { font-size: 15px; }
 }
 @media (max-width: 900px) {
