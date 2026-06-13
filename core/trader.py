@@ -60,12 +60,45 @@ SELL_COOLDOWN_MIN  = config.SELL_COOLDOWN_MIN  # 매도 후 재매수 금지 시
 
 _sell_cooldown: dict[str, datetime] = {}   # ticker → 매도 시각
 _buy_fail: dict[str, dict] = {}            # ticker → {"count": int, "until": datetime|None}
-_buy_confirm: dict[str, int] = {}          # ticker → 연속 score≥8 사이클 수 (진입 디바운스용)
+_buy_confirm: dict[str, int] = {}          # ticker → 연속 score≥임계치 사이클 수 (진입 디바운스용)
 
 # 자동 매매 절대 제외 코인 (보유 중이므로 매수·매도 금지)
 TRADING_BLACKLIST = {"KRW-XRP", "KRW-CRO", "KRW-RVN"}
 
 _MAX_LOG = 50
+
+# 시장 레짐 캐시 (BTC 일봉 추세) — 매 사이클 재조회 대신 일정 시간 캐싱
+_regime_cache = {"ts": None, "ok": True, "reason": ""}
+_REGIME_TTL_SEC = 600   # 10분
+
+
+def _market_regime_ok(client: UpbitClient, now_dt: datetime) -> tuple[bool, str]:
+    """시장 프록시(BTC) 일봉 추세가 매수에 우호적인지 판정.
+
+    ema_short >= ema_mid 이면 우호(상승/중립), 미만이면 하락 레짐 → 신규 매수 차단.
+    하락장 롱 진입을 막아 거래당 기대값을 양으로 전환하는 핵심 필터(backtest 검증:
+    365일 -39% 하락장에서 재설계 룰+이 필터 = 기대값 +0.15%). 실패 시 보수적으로 허용.
+    """
+    if not config.MARKET_REGIME_FILTER:
+        return True, ""
+    cached_ts = _regime_cache["ts"]
+    if cached_ts and (now_dt - cached_ts).total_seconds() < _REGIME_TTL_SEC:
+        return _regime_cache["ok"], _regime_cache["reason"]
+    ok, reason = True, ""
+    try:
+        from core.indicators import add_all_indicators, get_latest_indicators
+        df = client.get_ohlcv(config.MARKET_REGIME_PROXY, "day", 200)
+        if df is not None and not df.empty:
+            df = add_all_indicators(df)
+            ind = get_latest_indicators(df)
+            es, em = ind.get("ema_short", 0), ind.get("ema_mid", 0)
+            if es < em:
+                ok = False
+                reason = f"시장 하락 레짐 ({config.MARKET_REGIME_PROXY} 단기<중기 EMA) — 신규 매수 차단"
+    except Exception as e:
+        logging.warning(f"시장 레짐 판정 실패(보수적 허용): {e}")
+    _regime_cache.update({"ts": now_dt, "ok": ok, "reason": reason})
+    return ok, reason
 
 
 # ─────────────────────────────────────────────
@@ -637,20 +670,26 @@ def run_auto_trade():
         elif fg["value"] <= config.FEAR_GREED_FEAR_MIN:
             fg_block = f"F&G {fg['value']} 극단공포"
 
+    # 시장 레짐 필터 (BTC 일봉 하락 추세면 전 종목 신규 매수 차단)
+    regime_ok, regime_reason = _market_regime_ok(client, now_dt)
+
     # 신규 매수 차단 사유 종합
     skip_buy_reason = None
     if buy_block_reason:
         skip_buy_reason = buy_block_reason
+    elif not regime_ok:
+        skip_buy_reason = regime_reason
     elif fg_block:
         skip_buy_reason = f"{fg_block} — 매수 차단"
     elif market_stale:
         age_txt = f"{market_age:.0f}초" if market_age is not None else "알 수 없음"
         skip_buy_reason = f"시장 데이터 노후 ({age_txt}) — 매수 보류"
 
-    # 진입 디바운스 카운터 갱신: 강한 매수 신호(score≥8)를 연속 유지한 사이클 수를 센다.
+    # 진입 디바운스 카운터 갱신: 강한 매수 신호(score≥임계치)를 연속 유지한 사이클 수를 센다.
     # BUY_CONFIRM_TICKS사이클 이상 유지된 후보만 진입 → 미완성 캔들의 순간 스파이크 진입 방지.
     signal_set = {c["ticker"] for c in market_coins
-                  if c.get("action_class") == "buy-strong" and c.get("total_score", 0) >= 8}
+                  if c.get("action_class") == "buy-strong"
+                  and c.get("total_score", 0) >= config.BUY_SCORE_THRESHOLD}
     for tk in list(_buy_confirm.keys()):
         if tk not in signal_set:
             del _buy_confirm[tk]
@@ -662,7 +701,7 @@ def run_auto_trade():
         candidates = sorted(
             [c for c in market_coins
              if c.get("action_class") == "buy-strong"
-             and c.get("total_score", 0) >= 8
+             and c.get("total_score", 0) >= config.BUY_SCORE_THRESHOLD
              and _buy_confirm.get(c["ticker"], 0) >= config.BUY_CONFIRM_TICKS
              and c["ticker"] not in current_positions
              and c["ticker"] not in TRADING_BLACKLIST
@@ -798,7 +837,7 @@ def run_auto_trade():
                 continue
 
             # 강한 매수 신호 확인
-            if not coin_data or coin_data.get("total_score", 0) < 8:
+            if not coin_data or coin_data.get("total_score", 0) < config.BUY_SCORE_THRESHOLD:
                 continue
 
             amount2 = round(per_coin2 * 0.999)

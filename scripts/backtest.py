@@ -93,8 +93,30 @@ def row_to_ind(df: pd.DataFrame, i: int) -> dict:
 # 단일 종목 백테스트
 # ─────────────────────────────────────────────
 
+_MARKET_REGIME_CACHE = None
+
+def build_market_regime(days: int) -> list:
+    """시장 프록시(BTC) 일봉 추세 레짐을 (date, ok_to_buy) 목록으로 반환.
+    ok_to_buy = BTC 일봉 ema_short >= ema_mid (중기 추세 상승/중립) → 하락장 진입 차단용.
+    """
+    global _MARKET_REGIME_CACHE
+    if _MARKET_REGIME_CACHE is not None:
+        return _MARKET_REGIME_CACHE
+    btc = fetch_ohlcv("KRW-BTC", "day", max(220, days + 60))
+    regime = []
+    if not btc.empty:
+        btc = add_all_indicators(btc)
+        for i in range(len(btc)):
+            es = btc["ema_short"].iloc[i]
+            em = btc["ema_mid"].iloc[i]
+            regime.append((btc.index[i].date(), bool(es >= em)))
+    _MARKET_REGIME_CACHE = regime
+    return regime
+
+
 def backtest_ticker(ticker: str, days: int, threshold: float, confirm: int,
-                    intrabar: bool, verbose: bool) -> dict:
+                    intrabar: bool, verbose: bool, no_signal_exit: bool = False,
+                    regime_gate: bool = False) -> dict:
     hourly = fetch_ohlcv(ticker, "minute60", days * 24)
     daily  = fetch_ohlcv(ticker, "day", max(220, days + 60))
     if hourly.empty or daily.empty or len(hourly) < 60:
@@ -119,6 +141,17 @@ def backtest_ticker(ticker: str, days: int, threshold: float, confirm: int,
                 break
         return sc
 
+    market_regime = build_market_regime(days) if regime_gate else []
+    def market_ok_before(d):
+        """날짜 d 이전(미포함) 가장 최근 BTC 일봉 레짐. 룩어헤드 제거. 기본 True."""
+        ok = True
+        for dt, v in market_regime:
+            if dt < d:
+                ok = v
+            else:
+                break
+        return ok
+
     tp = config.TAKE_PROFIT_PERCENT
     sl = config.MAX_LOSS_PERCENT
     tr_start = config.TRAILING_START_PCT
@@ -142,8 +175,10 @@ def backtest_ticker(ticker: str, days: int, threshold: float, confirm: int,
         _, action_class = action_from_score(total)
 
         if not in_pos:
+            # 시장 레짐 게이트: BTC 일봉이 하락 추세면 신규 진입 차단
+            regime_block = regime_gate and not market_ok_before(ts.date())
             # 진입 디바운스: confirm 연속 봉에서 score>=threshold 유지해야 진입
-            if total >= threshold:
+            if total >= threshold and not regime_block:
                 consec += 1
             else:
                 consec = 0
@@ -184,7 +219,7 @@ def backtest_ticker(ticker: str, days: int, threshold: float, confirm: int,
         elif peak_profit_pct >= tr_start and close <= peak * (1 - tr_stop / 100):
             exit_price = close
             reason = "트레일링"
-        elif action_class == "sell-strong":
+        elif (not no_signal_exit) and action_class == "sell-strong":
             exit_price = close
             reason = "매도신호"
         elif held_h >= max_hold_h:
@@ -200,7 +235,12 @@ def backtest_ticker(ticker: str, days: int, threshold: float, confirm: int,
             })
             in_pos = False
 
-    return {"ticker": ticker, "trades": trades, "skipped": None}
+    # Buy&Hold 벤치마크: 백테스트 구간(warmup 이후) 시가→종가 수익률
+    bh_start = float(hourly["close"].iloc[warmup])
+    bh_end   = float(hourly["close"].iloc[-1])
+    bh_ret = (bh_end / bh_start - 1) * 100 if bh_start > 0 else 0.0
+
+    return {"ticker": ticker, "trades": trades, "skipped": None, "bh_ret": bh_ret}
 
 
 # ─────────────────────────────────────────────
@@ -245,11 +285,16 @@ def main():
     ap.add_argument("--tickers", default=",".join(DEFAULT_TICKERS),
                     help="쉼표구분 티커 목록")
     ap.add_argument("--days", type=int, default=90, help="1시간봉 백테스트 기간(일)")
-    ap.add_argument("--threshold", type=float, default=8.0, help="매수 진입 점수 기준")
+    ap.add_argument("--threshold", type=float, default=12.0,
+                    help="매수 진입 점수 기준 (라이브 기본 config.BUY_SCORE_THRESHOLD와 일치)")
     ap.add_argument("--confirm", type=int, default=1,
                     help="진입 확정에 필요한 연속 봉 수(디바운스). 1=즉시, 2+=리페인팅 방지")
     ap.add_argument("--intrabar", action="store_true",
                     help="장중 고저 터치로 손절/익절 판정(기본: 종가)")
+    ap.add_argument("--no-signal-exit", action="store_true",
+                    help="신호반전(sell-strong) 청산 비활성화 — 추세추종 진입의 휩쏘 청산 영향 측정용")
+    ap.add_argument("--regime-gate", action="store_true",
+                    help="시장 레짐 필터: BTC 일봉 하락 추세 구간 신규 진입 차단")
     ap.add_argument("--verbose", action="store_true", help="개별 트레이드 출력")
     args = ap.parse_args()
 
@@ -264,12 +309,16 @@ def main():
 
     all_trades = []
     per_ticker = []
+    bh_rets = []
     for tk in tickers:
         res = backtest_ticker(tk, args.days, args.threshold, args.confirm,
-                              args.intrabar, args.verbose)
+                              args.intrabar, args.verbose, args.no_signal_exit,
+                              args.regime_gate)
         if res.get("skipped"):
             print(f"  {tk:12s} 스킵 ({res['skipped']})")
             continue
+        if res.get("bh_ret") is not None:
+            bh_rets.append(res["bh_ret"])
         s = summarize(res["trades"])
         per_ticker.append((tk, s))
         all_trades.extend(res["trades"])
@@ -295,6 +344,11 @@ def main():
           f"평균 보유 {agg['avg_hold_h']:.1f}h")
     print(f"순차 복리 수익률 {agg['total_compound']:+.1f}%  |  최대낙폭(MDD) {agg['mdd']:.1f}%")
     print(f"청산 사유 분포: {agg['reasons']}")
+    if bh_rets:
+        bh_avg = sum(bh_rets) / len(bh_rets)
+        print(f"[벤치마크] Buy&Hold 평균 종목 수익률 {bh_avg:+.1f}% "
+              f"({len([r for r in bh_rets if r > 0])}/{len(bh_rets)} 종목 상승) "
+              f"— 구간 시장 방향성")
     print()
     # 기대값 해석
     ev = agg["avg_ret"]

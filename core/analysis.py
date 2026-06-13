@@ -54,39 +54,68 @@ def bb_class(bb_pct):
     else:               return "neutral"
 
 def score_signal(ind):
-    score = 0
-    rsi = ind['rsi']
-    if rsi < 25:   score += 3
-    elif rsi < 35: score += 2
-    elif rsi < 45: score += 1
-    elif rsi > 75: score -= 3
-    elif rsi > 65: score -= 2
-    elif rsi > 55: score -= 1
+    """추세 정렬 + 모멘텀 확인형 진입 점수.
 
+    [재설계 배경] 구버전은 RSI 과매도·BB 하단 이탈에 큰 가점을 주는 순수
+    평균회귀(역추세) 모델이었다. 일봉 가중치가 2.5배라 '강한 매수'가 곧
+    '일봉 깊은 과매도 = 하락추세 한복판'을 의미했고, 백테스트에서 거래당
+    기대값 -0.56%(승률 47.7%)로 일관된 음의 우위가 확인됐다(README 15절).
+
+    [재설계 원칙]
+      1) 추세 레짐을 1차 게이트로: 상승 정배열에 가점, 하락 역배열에 감점.
+      2) 모멘텀(MACD) 전환을 핵심 동력으로: 골든/데드크로스·히스토그램 방향.
+      3) RSI·BB·스토캐스틱은 '추세 안에서의 위치'로 재해석 —
+         상승추세의 얕은 눌림목은 매수 기회, 비추세 과매도에는 가점하지 않아
+         '떨어지는 칼 잡기'를 차단한다.
+    """
+    es, em, el = ind['ema_short'], ind['ema_mid'], ind['ema_long']
+    rsi = ind['rsi']
     hist = ind['macd_hist']
     prev = ind['prev_macd_hist']
-    if prev < 0 and hist > 0:     score += 3
-    elif prev > 0 and hist < 0:   score -= 3
-    elif hist > 0 and hist > prev: score += 1
-    elif hist < 0 and hist > prev: score += 1
-    elif hist < 0 and hist < prev: score -= 1
-
     bb_pct = ind['bb_pct']
-    if bb_pct <= 0.0:   score += 3
-    elif bb_pct <= 0.2: score += 1
-    elif bb_pct >= 1.0: score -= 3
-    elif bb_pct >= 0.8: score -= 1
-
-    es, em, el = ind['ema_short'], ind['ema_mid'], ind['ema_long']
-    if es > em > el:   score += 1
-    elif es < em < el: score -= 1
-
     sk = ind['stoch_k']
-    if sk < 20:   score += 1
-    elif sk > 80: score -= 1
-
-    # 거래량 급증이 방향성을 확인하면 +1, 거래량 없는 신호는 신뢰도 낮음
     vol = ind.get('volume_ratio', 1.0)
+
+    bullish = es > em > el
+    bearish = es < em < el
+
+    score = 0
+
+    # ── 추세 레짐 (1차 게이트) ──
+    if bullish:   score += 2
+    elif bearish: score -= 2
+
+    # ── MACD 모멘텀 (추세추종 핵심 동력) ──
+    if prev < 0 and hist > 0:        score += 3   # 골든크로스
+    elif prev > 0 and hist < 0:      score -= 3   # 데드크로스
+    elif hist > 0 and hist > prev:   score += 2   # 상승 모멘텀 강화
+    elif hist < 0 and hist < prev:   score -= 2   # 하락 모멘텀 강화
+
+    # ── RSI: 추세에 따라 의미를 다르게 해석 ──
+    # 상승추세의 얕은 눌림(40~60)은 매수 기회. 깊은 과매도(<40)는 추세가
+    # 받쳐줄 때만 소폭 가점. 비추세 과매도에는 가점하지 않는다(knife-catch 차단).
+    if bullish:
+        if 40 <= rsi <= 60:  score += 2   # 추세 내 눌림목
+        elif rsi < 40:       score += 1   # 깊은 눌림 (추세가 받쳐줌)
+        elif rsi > 78:       score -= 1   # 과열
+    else:
+        if rsi > 70:   score -= 2         # 비추세 과매수 → 매도 압력
+        elif rsi > 60: score -= 1
+
+    # ── 볼린저: 추세 내 위치로 해석 ──
+    # 상승추세의 중상단 주행은 강세 지속, 하단 이탈은 추세 깨짐 경고.
+    if bullish:
+        if bb_pct >= 0.8:   score += 1    # 상단 주행 = 강세 지속
+        elif bb_pct <= 0.0: score -= 1    # 추세 이탈 경고
+    else:
+        if bb_pct >= 1.0:   score -= 2    # 비추세 상단 이탈 → 매도
+        elif bb_pct >= 0.8: score -= 1
+
+    # ── 스토캐스틱 (보조) ──
+    if bullish and sk < 40:  score += 1   # 추세 내 단기 눌림
+    elif sk > 85:            score -= 1   # 과열
+
+    # ── 거래량 확인: 방향성 신호를 거래량이 뒷받침하면 가중 ──
     if vol >= 2.0:
         if score > 0:   score += 1
         elif score < 0: score -= 1

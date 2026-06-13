@@ -51,10 +51,23 @@ BUY_FAIL_LIMIT        = int(os.getenv("BUY_FAIL_LIMIT",        "3"))   # 연속 
 BUY_FAIL_COOLDOWN_MIN = int(os.getenv("BUY_FAIL_COOLDOWN_MIN", "30"))  # 실패 한도 초과 시 해당 종목 매수 금지 시간 (분)
 
 # ─── 진입 디바운스 (리페인팅 방지) ───
-# 신규 매수 진입에 필요한 연속 매매 사이클 수. 1=즉시 진입(현행). 2+면 score≥8이
+# 신규 매수 진입에 필요한 연속 매매 사이클 수. 1=즉시 진입(현행). 2+면 score≥임계치가
 # 연속 N사이클 유지돼야 진입 → 미완성 캔들의 순간 스파이크 진입을 거른다.
 # 주의: scripts/backtest.py 측정 결과 현 룰에서는 2+가 개선이 없어 기본 1로 둔다.
 BUY_CONFIRM_TICKS = int(os.getenv("BUY_CONFIRM_TICKS", "1"))
+
+# ─── 진입 점수 임계치 ───
+# 가중 종합점수(일봉×2.5 + 1h×2 + 1m×0.5)가 이 값 이상이면 '강한 매수' 후보로 진입.
+# 진입 신호 재설계(추세정렬형) + 시장 레짐 필터와 함께 backtest.py로 검증한 값:
+#   365일 구간(Buy&Hold -39%)에서 임계치 12 + 레짐필터 = 거래당 기대값 +0.15%(양수).
+# 구버전 역추세 룰의 기본값은 8이었으나, 재설계 룰에서는 12가 양의 기대값 구간이다.
+BUY_SCORE_THRESHOLD = float(os.getenv("BUY_SCORE_THRESHOLD", "12"))
+
+# ─── 시장 레짐 필터 ───
+# True면 시장 프록시(BTC) 일봉 추세가 하락(ema_short < ema_mid)일 때 전 종목 신규 매수를
+# 차단한다. 하락장에서 롱 진입을 막아 기대값을 양으로 전환하는 핵심 장치(backtest 검증).
+MARKET_REGIME_FILTER = os.getenv("MARKET_REGIME_FILTER", "True").lower() == "true"
+MARKET_REGIME_PROXY  = os.getenv("MARKET_REGIME_PROXY", "KRW-BTC")
 
 # ─── 포지션 사이징 ───
 # True: 코인당 매수금액을 (총자산 / MAX_POSITIONS)로 제한해 단일 코인 집중을 방지.
