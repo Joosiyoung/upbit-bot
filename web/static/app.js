@@ -219,14 +219,14 @@ fetchAnalysis();
 let marketCountdownId   = null;
 let manualRefreshPollId = null;
 
-function buildMarketCard(c) {
+function buildMarketCard(c, isCandidate = false) {
   const chgClass = c.change_24h > 0 ? 'pos' : c.change_24h < 0 ? 'neg' : 'zero';
   const chgStr   = (c.change_24h >= 0 ? '+' : '') + c.change_24h.toFixed(2) + '%';
   const rsiClass = c.rsi_class_1h || 'neutral';
   const rsiVal   = c.rsi_1h != null ? c.rsi_1h : 50;
 
   return `
-  <div class="market-card ${c.action_class}">
+  <div class="market-card ${c.action_class}${isCandidate ? ' buy-candidate' : ''}">
     <div class="mcard-top">
       <div class="mcard-icon">${c.coin.slice(0,3)}</div>
       <div class="mcard-name-wrap">
@@ -247,6 +247,7 @@ function buildMarketCard(c) {
         </div>
         <span class="mcard-rsi-val ${rsiClass}">${rsiVal}</span>
       </div>
+      <span class="mcard-score">${c.total_score}점</span>
     </div>
   </div>`;
 }
@@ -255,7 +256,19 @@ function renderMarket(data) {
   document.getElementById('market-loading').style.display = 'none';
   const grid = document.getElementById('market-grid');
   grid.style.display = '';
-  grid.innerHTML = data.coins.map(buildMarketCard).join('');
+
+  const sorted     = [...data.coins].sort((a, b) => b.total_score - a.total_score);
+  const candidates = sorted.filter(c => c.action_class === 'buy-strong');
+  const others     = sorted.filter(c => c.action_class !== 'buy-strong');
+
+  let html = '';
+  if (candidates.length > 0) {
+    html += `<div class="market-section-label candidate">매수 후보 · ${candidates.length}종</div>`;
+    html += candidates.map(c => buildMarketCard(c, true)).join('');
+    html += `<div class="market-section-label">전체 시장</div>`;
+  }
+  html += others.map(c => buildMarketCard(c, false)).join('');
+  grid.innerHTML = html;
 }
 
 async function fetchMarket() {

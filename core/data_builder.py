@@ -332,7 +332,7 @@ def build_market_data():
     return {
         "status":     "ok",
         "updated_at": datetime.now(timezone.utc).isoformat(),
-        "coins":      coins_result,
+        "coins":      sorted(coins_result, key=lambda x: x["total_score"], reverse=True),
     }
 
 

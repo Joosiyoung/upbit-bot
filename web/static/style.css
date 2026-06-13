@@ -472,6 +472,26 @@ footer {
 }
 .mcard-score { font-size: 11px; color: var(--text-muted); }
 
+/* 마켓 섹션 구분선 */
+.market-section-label {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--text-muted); padding: 2px 0 4px;
+}
+.market-section-label::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+.market-section-label.candidate { color: var(--green); }
+
+/* 매수 후보 카드 하이라이트 */
+.market-card.buy-candidate {
+  box-shadow: 0 0 0 2px rgba(18,184,134,.35), var(--shadow);
+}
+.market-card.buy-candidate:hover {
+  box-shadow: 0 0 0 2px rgba(18,184,134,.5), var(--shadow-lg);
+}
+
 /* 마켓 로딩 */
 #market-loading {
   padding: 32px; display: flex; align-items: center; justify-content: center;
