@@ -120,8 +120,21 @@ def api_refresh():
 
 @app.route('/api/trading/start', methods=['POST'])
 def api_trading_start():
-    live_mode = request.json.get("live", False) if request.is_json else False
-    result = trading_control.start_trading(live_mode)
+    data      = request.get_json(silent=True) or {}
+    live_mode = data.get("live", False)
+
+    # 시뮬레이션 가상 예산(선택). 비어 있으면 None → 업비트 잔고 사용.
+    sim_budget = None
+    raw = data.get("sim_budget")
+    if raw is not None and str(raw).strip() != "":
+        try:
+            sim_budget = float(str(raw).replace(",", "").strip())
+        except ValueError:
+            return jsonify({"ok": False, "error": "가상 자산 금액이 올바르지 않습니다."}), 400
+        if sim_budget <= 0:
+            return jsonify({"ok": False, "error": "가상 자산은 0보다 커야 합니다."}), 400
+
+    result = trading_control.start_trading(live_mode, sim_budget)
     return jsonify(result), (200 if result.get("ok") else 409)
 
 

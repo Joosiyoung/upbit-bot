@@ -533,6 +533,15 @@ footer {
 .mode-badge.live { background: var(--red-dim);  color: var(--red);  border: 1px solid rgba(240,62,62,.3); }
 .mode-badge.sim  { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(59,91,219,.3); }
 
+.sim-budget-input {
+  width: 200px; padding: 6px 10px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--bg-card); color: var(--text-pri);
+  font-size: 12px; transition: border-color .15s;
+}
+.sim-budget-input::placeholder { color: var(--text-muted); font-size: 11px; }
+.sim-budget-input:focus    { outline: none; border-color: var(--blue); }
+.sim-budget-input:disabled { opacity: .4; cursor: not-allowed; }
+
 .btn-trade-sim {
   background: var(--blue-dim); border: 1px solid rgba(59,91,219,.3);
   color: var(--blue); padding: 6px 13px; border-radius: var(--radius-sm);

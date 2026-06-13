@@ -556,17 +556,28 @@ async function fetchPerformance(live) {
 function setStartBtnsDisabled(disabled) {
   document.getElementById('btn-trade-sim').disabled  = disabled;
   document.getElementById('btn-trade-live').disabled = disabled;
+  const budgetInput = document.getElementById('sim-budget-input');
+  if (budgetInput) budgetInput.disabled = disabled;
 }
 
 async function tradingStart(live) {
   setStartBtnsDisabled(true);
   try {
+    const body = {live};
+    // 시뮬레이션: 가상자산 입력칸이 채워져 있으면 그 값을 예산으로 전송 (비면 업비트 잔고 사용)
+    if (!live) {
+      const v = (document.getElementById('sim-budget-input')?.value || '').trim();
+      if (v !== '') body.sim_budget = v;
+    }
     const res = await fetch('/api/trading/start', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({live}),
+      body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || ('HTTP ' + res.status));
+    }
     tradingActive = true;
     await fetchTradingStatus();
     clearInterval(tradingPollId);

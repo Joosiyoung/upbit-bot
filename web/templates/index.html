@@ -94,6 +94,9 @@
         </div>
         <div class="trading-sim-wrap">
           <span class="mode-badge" id="trade-mode-badge">—</span>
+          <input type="number" class="sim-budget-input" id="sim-budget-input"
+                 min="0" step="10000" placeholder="가상자산(원) · 비우면 업비트 잔고"
+                 title="시뮬레이션 가상 KRW 예산. 비워두면 내 업비트 잔고를 사용합니다.">
           <button class="btn-trade-sim" id="btn-trade-sim" onclick="tradingStart(false)">시뮬레이션 시작</button>
         </div>
       </div>

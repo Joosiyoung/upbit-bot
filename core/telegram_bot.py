@@ -2,9 +2,9 @@
 """Telegram 명령 봇 — 폰에서 매매 원격 제어
 
 지원 명령:
-  /status      현재 상태·잔고·포지션 요약
-  /start_sim   시뮬레이션 매매 시작
-  /start_live  실거래 매매 시작 (→ /confirm 2단계 확인)
+  /status        현재 상태·잔고·포지션 요약
+  /start_sim [금액]  시뮬레이션 매매 시작 (금액 생략 시 입력 유도, '잔고'면 업비트 잔고 사용)
+  /start_live    실거래 매매 시작 (→ /confirm 2단계 확인)
   /stop        매매 중지 (포지션 보유 유지)
   /liquidate   매매 중지 + 전액 청산 (→ /confirm 2단계 확인)
   /confirm     위 위험 명령 확인 (60초 이내)
@@ -41,16 +41,44 @@ _CONFLICT_BACKOFF = 60                 # 409 (다른 폴러 존재) 시 대기 (
 # 위험 명령 2단계 확인 상태 (단일 사용자 전제이므로 모듈 전역으로 충분)
 _pending = {"action": None, "expires": None}
 
+# 시뮬 가상자산 입력 대기 상태 (/start_sim 을 인자 없이 보냈을 때)
+_pending_budget = {"active": False, "expires": None}
+
 _HELP_TEXT = (
     "<b>명령어 목록</b>\n"
     "/status — 상태·잔고·포지션 요약\n"
-    "/start_sim — 시뮬레이션 시작\n"
+    "/start_sim [금액] — 시뮬레이션 시작 (금액 생략 시 입력 유도, '잔고'면 업비트 잔고)\n"
     "/start_live — 실거래 시작 (확인 필요)\n"
     "/stop — 매매 중지 (보유 유지)\n"
     "/liquidate — 중지 + 전액 청산 (확인 필요)\n"
     "/confirm — 위험 명령 확인 (60초 이내)\n"
     "/help — 이 도움말"
 )
+
+
+def _parse_budget(text: str):
+    """문자열을 시뮬 가상예산으로 파싱.
+    반환: (ok: bool, budget: float|None, err: str|None)
+    빈값·'0'·'잔고'·'balance'·'기본' → budget=None (업비트 잔고 사용)."""
+    t = (text or "").strip().lower()
+    for token in (",", "원", "krw", "kr", " "):
+        t = t.replace(token, "")
+    if t in ("", "0", "잔고", "balance", "기본", "default"):
+        return True, None, None
+    try:
+        v = float(t)
+    except ValueError:
+        return False, None, "금액이 올바르지 않습니다. 예: /start_sim 500000  (또는 '잔고')"
+    if v <= 0:
+        return False, None, "가상 자산은 0보다 커야 합니다."
+    return True, v, None
+
+
+def _start_sim(budget):
+    """시뮬레이션 시작 + 실패 시 안내. 성공 알림은 start_trading 내부 notify_event가 처리."""
+    result = trading_control.start_trading(live_mode=False, sim_budget=budget)
+    if not result.get("ok"):
+        notifier.send(f"⚠️ {result.get('error', '시작 실패')}")
 
 
 def _get_updates(offset):
@@ -103,7 +131,7 @@ def _take_pending() -> str | None:
     return None
 
 
-def _handle_command(cmd: str):
+def _handle_command(cmd: str, arg: str | None = None):
     """명령 처리. 응답은 notifier 큐로 전송 (HTML 모드)."""
     reply = notifier.send
 
@@ -118,10 +146,21 @@ def _handle_command(cmd: str):
             reply(f"⚠️ 상태 조회 오류: {str(e)[:100]}")
 
     elif cmd == "/start_sim":
-        result = trading_control.start_trading(live_mode=False)
-        if not result.get("ok"):
-            reply(f"⚠️ {result.get('error', '시작 실패')}")
-        # 성공 알림은 start_trading 내부의 notify_event가 전송
+        if arg:
+            # 인라인 인자: /start_sim 500000  (또는 /start_sim 잔고)
+            ok, budget, err = _parse_budget(arg)
+            if not ok:
+                reply(f"⚠️ {err}")
+            else:
+                _start_sim(budget)
+        else:
+            # 인자 없음 → 가상자산 입력 유도 (다음 숫자 메시지로 시작)
+            _pending_budget["active"]  = True
+            _pending_budget["expires"] = datetime.now() + timedelta(seconds=_CONFIRM_TTL)
+            reply("💰 <b>시뮬레이션 가상 자산 입력</b>\n"
+                  "예산(원)을 숫자로 보내주세요. 예: <code>500000</code>\n"
+                  "내 업비트 잔고로 시작하려면 <code>잔고</code> 라고 입력하세요. "
+                  f"({_CONFIRM_TTL}초 이내)")
 
     elif cmd == "/start_live":
         _set_pending("start_live")
@@ -179,9 +218,27 @@ def telegram_worker():
                 if chat_id != str(config.TELEGRAM_CHAT_ID):
                     logging.warning("Telegram 미등록 chat_id(%s)의 명령 무시: %s", chat_id, text[:50])
                     continue
-                cmd = text.split()[0].split("@")[0].lower()  # "/status@MyBot arg" → "/status"
+
+                # 가상자산 입력 대기 중 + 명령이 아닌 메시지 → 예산 입력으로 처리
+                if _pending_budget["active"] and not text.startswith("/"):
+                    _pending_budget["active"] = False
+                    if _pending_budget["expires"] and datetime.now() > _pending_budget["expires"]:
+                        notifier.send("⏰ 가상 자산 입력 시간이 만료됐습니다. /start_sim 으로 다시 시작하세요.")
+                        continue
+                    ok, budget, err = _parse_budget(text)
+                    if not ok:
+                        notifier.send(f"⚠️ {err}")
+                    else:
+                        _start_sim(budget)
+                    continue
+
+                parts = text.split(maxsplit=1)
+                cmd   = parts[0].split("@")[0].lower()        # "/status@MyBot arg" → "/status"
+                arg   = parts[1].strip() if len(parts) > 1 else None
+                # 새 명령이 들어오면 대기 중이던 가상자산 입력은 취소
+                _pending_budget["active"] = False
                 logging.info("Telegram 명령 수신: %s", cmd)
-                _handle_command(cmd)
+                _handle_command(cmd, arg)
         except requests.exceptions.Timeout:
             continue   # long polling 타임아웃은 정상
         except Exception as e:

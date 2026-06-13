@@ -24,8 +24,12 @@ from core.data_builder import _market_cache, _market_lock, _cache, _cache_lock
 # 매매 시작
 # ─────────────────────────────────────────────
 
-def start_trading(live_mode: bool) -> dict:
-    """자동 매매 시작. 반환: {"ok": bool, ...} (Flask 응답과 동일 구조)"""
+def start_trading(live_mode: bool, sim_budget: float | None = None) -> dict:
+    """자동 매매 시작. 반환: {"ok": bool, ...} (Flask 응답과 동일 구조)
+
+    sim_budget: 시뮬레이션 가상 KRW 예산. None/0이면 실제 업비트 KRW 잔고를 사용.
+                실거래(live_mode=True)에서는 무시된다.
+    """
     # 중복 시작 가드 — 이미 실행 중이면 포지션/가상잔고가 리셋되는 사고 방지
     with _trading_lock:
         if _trading_state["enabled"]:
@@ -76,13 +80,20 @@ def start_trading(live_mode: bool) -> dict:
     except Exception as e:
         logging.warning("초기 포지션 로드 실패 (API 오류로 빈 포지션으로 시작): %s", e)
 
-    # 시뮬레이션: 현재 KRW 잔고를 가상 예산으로 사용
+    # 시뮬레이션 가상 예산 결정:
+    #   - sim_budget 지정 시 그 값을 가상 KRW로 사용 (사용자 임의 설정)
+    #   - 미지정(None/0) 시 실제 업비트 KRW 잔고를 가상 예산으로 사용
     sim_krw = 0.0
+    sim_budget_source = "balance"
     if not live_mode:
-        try:
-            sim_krw = client.get_balance_krw()
-        except Exception:
-            sim_krw = 100_000.0  # API 오류 시 폴백
+        if sim_budget is not None and sim_budget > 0:
+            sim_krw = float(sim_budget)
+            sim_budget_source = "custom"
+        else:
+            try:
+                sim_krw = client.get_balance_krw()
+            except Exception:
+                sim_krw = 100_000.0  # API 오류 시 폴백
 
     imported = len(initial_positions)
     initial_invested = sum(p["amount_krw"] for p in initial_positions.values())
@@ -97,9 +108,10 @@ def start_trading(live_mode: bool) -> dict:
         _trading_state["positions"]  = initial_positions
         _trading_state["last_check"] = None
         _trading_state["epoch"]     += 1   # 진행 중이던 사이클의 낡은 쓰기 무효화
+        budget_note = "직접 설정" if sim_budget_source == "custom" else "업비트 잔고"
         _trading_state["status_msg"] = (
             f"실거래 활성화됨 (보유 {imported}종목 포함, 슬롯 {imported}/{MAX_POSITIONS})" if live_mode
-            else f"시뮬레이션 활성화됨 (보유 {imported}종목 포함, 가상잔고 {sim_krw:,.0f}원)"
+            else f"시뮬레이션 활성화됨 (보유 {imported}종목 포함, 가상잔고 {sim_krw:,.0f}원 [{budget_note}])"
         )
     save_state()
 
@@ -110,8 +122,9 @@ def start_trading(live_mode: bool) -> dict:
         "▶️ 자동 매매 시작" if live_mode else "▶️ 시뮬레이션 시작",
         f"모드: {'실거래' if live_mode else '시뮬레이션'}\n"
         f"초기 포지션: {imported}종목 (슬롯 {imported}/{MAX_POSITIONS})"
-        + ("" if live_mode else f"\n가상잔고: {sim_krw:,.0f}원"))
-    return {"ok": True, "enabled": True, "live": live_mode, "sim_krw": sim_krw, "imported": imported}
+        + ("" if live_mode else f"\n가상잔고: {sim_krw:,.0f}원 ({'직접 설정' if sim_budget_source == 'custom' else '업비트 잔고'})"))
+    return {"ok": True, "enabled": True, "live": live_mode, "sim_krw": sim_krw,
+            "imported": imported, "sim_budget_source": sim_budget_source}
 
 
 # ─────────────────────────────────────────────
