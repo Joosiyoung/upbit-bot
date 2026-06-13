@@ -69,9 +69,9 @@ Flask 서버 (app.py)
 │   └── upbit-bot.service     — systemd 서비스 유닛 (자동 시작/재시작)
 ├── data/                 — (자동 생성) 봇 런타임 데이터
 │   ├── bot_state.json        — 포지션·쿨다운·리스크 상태 영속화
-│   └── trade_history.jsonl   — 전체 거래 이력 (append-only, hold 제외)
+│   └── trade_history.jsonl   — 거래 이력 (append, hold 제외, 최근 365일 보존·하루 1회 정리)
 ├── logs/                 — (자동 생성) 로그
-│   ├── bot.log               — 회전 로그 (1MB × 3)
+│   ├── bot.log               — 운영 로그 (자정 일 단위 회전, 최근 35일 보존)
 │   └── server.log            — restart.bat 기동 시 stdout/stderr 캡처
 ├── restart.bat           — 서버 재시작 (더블클릭 진입점, Windows)
 ├── requirements.txt      — Python 패키지 목록
@@ -541,8 +541,8 @@ Oracle Cloud 무료 VPS (Ubuntu 22.04)
 | 항목 | 내용 |
 |------|------|
 | 상태 영속화 | `bot_state.json` — 포지션·쿨다운·리스크 상태 저장, 재시작 시 자동 복원·자동 재개 |
-| 거래 이력 영속화 | `trade_history.jsonl` — 전체 체결 이력 append 기록 |
-| 파일 로깅 | `bot.log` 회전 로그 (1MB × 3), 사이클 예외 traceback 기록 |
+| 거래 이력 영속화 | `trade_history.jsonl` — 체결 이력 append 기록, **`TRADE_HISTORY_RETENTION_DAYS`(기본 365)일 보존** (하루 1회 원자적 재작성으로 정리; 0이면 영구). 레코드 ~180B라 1년에 수 MB 수준. 누적 성과 집계는 "최근 1년" 기준이 됨 |
+| 파일 로깅 | `bot.log` — **자정 일 단위 회전, `LOG_RETENTION_DAYS`(기본 35)일 보존** (크기 기반 1MB×3에서 변경: 주/월 단위 log-analyzer 실행 시 그 기간 운영 로그가 남도록), 사이클 예외 traceback 기록 |
 | 기타 | ai_worker 기동 즉시 1회 실행, F&G 실패 시 재시도, dust 포지션 처리, `KRW-MATIC → KRW-POL`, requirements 정리(anthropic 제거·PyJWT 명시), 워커 기동을 `__main__`으로 이동 |
 
 ### 2026-06-12 원격 운영 기능 추가
@@ -570,6 +570,9 @@ Oracle Cloud 무료 VPS (Ubuntu 22.04)
 | 분류 | 항목 | 내용 |
 |------|------|------|
 | 로그 위생 | 시장 스캔 현재가 실패 노이즈 제거 | `get_current_price(ticker, warn=False)` 추가 — 거래대금 톱20 스캔 중 상장폐지/신규 티커가 `Code not found`를 반환해 매 30초 사이클마다 WARNING이 도배되던 문제(전체 WARNING의 약 93%)를 DEBUG로 강등. **보유 코인 가격 조회 등 실패가 유의미한 경로는 기본 `warn=True` 유지** — 매도 판정 경로의 경고는 그대로 보임 (`upbit_client.py`, `data_builder.py` 스캔 호출부만 적용). 매매 로직·임계값 불변. |
+| 로그 위생 (출처 정정) | 보유 상폐코인 현재가 노이즈 제거 | 위 수정 후에도 DON/EVR/NOM 경고가 지속된 진짜 출처는 **스캔이 아니라 `build_analysis_data()` 보유코인 루프**([data_builder.py:91](core/data_builder.py))였다(계정이 상폐 코인을 더스트로 보유). 활성 KRW 마켓 목록(`ai_analysis.get_active_markets()`)에 없는 코인은 현재가 실패를 양성으로 보고 `warn=False`. **활성 보유코인의 가격 실패는 여전히 WARNING**(목록 미수신 시도 보수적으로 경고 유지). |
+| 로그 보존 | 일수 기반 회전 | `bot.log`를 `RotatingFileHandler`(1MB×3, 보존기간이 로그량 따라 며칠로 들쭉날쭉) → `TimedRotatingFileHandler`(자정 일 단위, `LOG_RETENTION_DAYS` 기본 35일)로 전환. **log-analyzer를 주/월 단위로 돌려도 그 기간 운영 로그가 보존**되도록. |
+| 거래 이력 보존 | 1년 캡 | `trade_history.jsonl`을 무한 누적 → **`TRADE_HISTORY_RETENTION_DAYS`(기본 365)일 보존**으로 변경(`_prune_trade_history`, 하루 1회·기동 시 정리, 레코드 'date' 기준 원자적 재작성). 날짜 미상·파싱불가 라인은 안전 보존. 0이면 영구. 분석엔 1년이면 충분하고 파일이 수 MB로 제한됨 |
 
 ### 2026-06-13 고도화 (전용 에이전트 진단 + 백테스트 기반)
 

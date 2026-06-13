@@ -80,6 +80,17 @@ EQUAL_WEIGHT_SIZING = os.getenv("EQUAL_WEIGHT_SIZING", "True").lower() == "true"
 # 기본 True(현행 동작 유지).
 ADD_BUY_ENABLED = os.getenv("ADD_BUY_ENABLED", "True").lower() == "true"
 
+# ─── 로그 보존 ───
+# 운영 로그(logs/bot.log)를 자정마다 일 단위로 회전하고 최근 N일치를 보관한다.
+# 종전 크기 기반(1MB×4)은 로그량에 따라 보존 기간이 며칠로 들쭉날쭉했다. log-analyzer를
+# 주/월 단위로 돌려도 그 기간 운영 로그가 남아 있도록 일수 기반으로 전환(기본 35일 = 월 주기 커버).
+LOG_RETENTION_DAYS = int(os.getenv("LOG_RETENTION_DAYS", "35"))
+
+# 거래 이력(data/trade_history.jsonl) 보존 일수. 하루 1회 이보다 오래된 레코드를 정리한다.
+# 레코드가 작아(~180B) 1년이면 수 MB 수준 — 분석엔 시장 한 사이클을 덮어 충분.
+# 0으로 두면 영구 보존(정리 안 함).
+TRADE_HISTORY_RETENTION_DAYS = int(os.getenv("TRADE_HISTORY_RETENTION_DAYS", "365"))
+
 # 기술적 지표 파라미터
 RSI_PERIOD = 14
 

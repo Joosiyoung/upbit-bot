@@ -80,6 +80,11 @@ def build_analysis_data():
     holdings_result = []
     total_eval = 0.0
 
+    # 상폐 코인(활성 KRW 마켓에 없음) 보유분은 현재가 'Code not found'가 정상 → 경고 억제.
+    # 활성 마켓 목록을 못 받았으면(빈 집합) 보수적으로 경고 유지(warn=True).
+    from core.ai_analysis import get_active_markets
+    active_mkts = get_active_markets()
+
     for b in balances:
         currency = b['currency']
         volume   = float(b['balance'])
@@ -88,7 +93,8 @@ def build_analysis_data():
 
         ticker    = f"KRW-{currency}"
         avg_price = float(b.get('avg_buy_price', 0))
-        current   = client.get_current_price(ticker)
+        warn_px   = (not active_mkts) or (ticker in active_mkts)
+        current   = client.get_current_price(ticker, warn=warn_px)
         if not current:
             continue
 

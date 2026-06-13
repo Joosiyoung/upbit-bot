@@ -20,8 +20,10 @@ from core.ai_analysis import ai_worker
 from core import config
 
 # ─────────────────────────────────────────────
-# 로깅: 파일(회전, logs/) + 콘솔
+# 로깅: 파일(일 단위 회전, logs/) + 콘솔
 # ─────────────────────────────────────────────
+# 자정마다 회전하고 최근 config.LOG_RETENTION_DAYS일치를 보관(기본 35일). 크기 기반과 달리
+# 로그량과 무관하게 보존 기간이 일정 → log-analyzer를 주/월 단위로 돌려도 그 기간 로그가 남음.
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 _LOG_DIR  = os.path.join(_BASE_DIR, "logs")
@@ -31,9 +33,10 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     force=True,   # 라이브러리가 먼저 로깅을 설정해도 우리 설정으로 덮어씀
     handlers=[
-        logging.handlers.RotatingFileHandler(
+        logging.handlers.TimedRotatingFileHandler(
             os.path.join(_LOG_DIR, "bot.log"),
-            maxBytes=1_000_000, backupCount=3, encoding="utf-8"),
+            when="midnight", interval=1,
+            backupCount=config.LOG_RETENTION_DAYS, encoding="utf-8"),
         logging.StreamHandler(),
     ],
 )

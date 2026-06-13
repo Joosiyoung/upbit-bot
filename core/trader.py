@@ -166,6 +166,53 @@ def _load_state():
                          mode, len(_trading_state["positions"]))
 
 
+_last_prune_date: str | None = None
+
+
+def _prune_trade_history():
+    """`TRADE_HISTORY_RETENTION_DAYS`보다 오래된 거래 이력을 정리(파일 원자적 재작성).
+    레코드의 'date'(YYYY-MM-DD) 기준. 날짜가 없거나 파싱 불가한 라인은 안전하게 보존한다.
+    0이면 영구 보존(정리 안 함)."""
+    days = config.TRADE_HISTORY_RETENTION_DAYS
+    if days <= 0 or not os.path.exists(TRADE_LOG_FILE):
+        return
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    try:
+        kept, dropped = [], 0
+        with open(TRADE_LOG_FILE, encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    d = json.loads(line).get("date")
+                except Exception:
+                    d = None
+                if d is None or d >= cutoff:   # 날짜 미상은 보존
+                    kept.append(line.rstrip("\n"))
+                else:
+                    dropped += 1
+        if dropped == 0:
+            return
+        tmp = TRADE_LOG_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            for line in kept:
+                f.write(line + "\n")
+        os.replace(tmp, TRADE_LOG_FILE)
+        logging.info("거래 이력 정리: %d일 경과 %d건 삭제 (보존 %d건)", days, dropped, len(kept))
+    except Exception as e:
+        logging.warning("거래 이력 정리 실패: %s", e)
+
+
+def _maybe_prune_trade_history():
+    """하루 1회만 실제 정리하도록 일자 게이트. 워커 매 사이클에서 호출(대부분 즉시 반환)."""
+    global _last_prune_date
+    today = datetime.now().strftime("%Y-%m-%d")
+    if _last_prune_date == today:
+        return
+    _last_prune_date = today
+    _prune_trade_history()
+
+
 def _log_trade(entry: dict):
     entry.setdefault("date", datetime.now().strftime("%Y-%m-%d"))
     with _trading_lock:
@@ -915,6 +962,9 @@ def run_auto_trade():
 
 def auto_trade_worker():
     while True:
+        # 거래 이력 보존 한도 정리 (하루 1회만 실제 수행)
+        _maybe_prune_trade_history()
+
         # 매매 여부와 무관하게 항상 market 데이터 갱신
         try:
             data = build_market_data()
@@ -942,3 +992,5 @@ def auto_trade_worker():
 
 # 모듈 로드 시 이전 상태 복원 (재시작 시 자동 재개)
 _load_state()
+# 기동 시 1회 거래 이력 보존 한도 정리 (일자 게이트 설정 겸용)
+_maybe_prune_trade_history()
