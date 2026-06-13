@@ -338,6 +338,15 @@ function escapeHtml(str) {
 let tradingPollId = null;
 
 function renderTradingStatus(data) {
+  // 서버의 활성 상태와 tradingActive 동기화
+  if (data.enabled && !tradingActive) {
+    tradingActive = true;
+    fetchMarket();
+    startCountdown(REFRESH_MS / 1000);
+  } else if (!data.enabled) {
+    tradingActive = false;
+  }
+
   // 모드 배지
   const badge = document.getElementById('trade-mode-badge');
   badge.textContent = data.live ? '실거래' : '시뮬레이션';
