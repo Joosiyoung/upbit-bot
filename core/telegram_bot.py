@@ -441,15 +441,20 @@ def _handle_command(cmd: str, arg: str | None = None):
             reply(f"⚠️ 파라미터 조회 오류: {html.escape(str(e)[:100])}")
 
     elif cmd == "/start_sim":
-        if arg:
-            # 인라인 인자: /start_sim 500000  (또는 /start_sim 잔고)
+        from core.trader import _trading_state, _trading_lock
+        with _trading_lock:
+            _enabled = _trading_state["enabled"]
+            _cur_mode = "실거래" if _trading_state["live"] else "시뮬레이션"
+        if _enabled:
+            reply(f"▶ 현재 <b>{_cur_mode}</b> 매매가 실행 중입니다.\n"
+                  "중지하려면 /stop 을 누르세요.")
+        elif arg:
             ok, budget, err = _parse_budget(arg)
             if not ok:
                 reply(f"⚠️ {err}")
             else:
                 _start_sim(budget)
         else:
-            # 인자 없음 → 가상자산 입력 유도 (다음 숫자 메시지로 시작)
             _pending_budget["active"]  = True
             _pending_budget["expires"] = datetime.now(_KST) + timedelta(seconds=_CONFIRM_TTL)
             reply("💰 <b>시뮬레이션 가상 자산 입력</b>\n"
@@ -458,9 +463,17 @@ def _handle_command(cmd: str, arg: str | None = None):
                   f"({_CONFIRM_TTL}초 이내)")
 
     elif cmd == "/start_live":
-        _set_pending("start_live")
-        reply("⚠️ <b>실거래 시작 확인</b>\n실제 계좌에서 매수·매도가 실행됩니다.\n"
-              f"계속하려면 {_CONFIRM_TTL}초 내에 /confirm 을 입력하세요.")
+        from core.trader import _trading_state, _trading_lock
+        with _trading_lock:
+            _enabled = _trading_state["enabled"]
+            _cur_mode = "실거래" if _trading_state["live"] else "시뮬레이션"
+        if _enabled:
+            reply(f"▶ 현재 <b>{_cur_mode}</b> 매매가 실행 중입니다.\n"
+                  "중지하려면 /stop 을 누르세요.")
+        else:
+            _set_pending("start_live")
+            reply("⚠️ <b>실거래 시작 확인</b>\n실제 계좌에서 매수·매도가 실행됩니다.\n"
+                  f"계속하려면 {_CONFIRM_TTL}초 내에 /confirm 을 입력하세요.")
 
     elif cmd == "/stop":
         result = trading_control.stop_trading(mode="hold")
