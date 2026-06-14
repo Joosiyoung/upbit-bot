@@ -995,6 +995,114 @@ def run_auto_trade():
         _trading_state["status_msg"] = f"마지막 체크: {now_str}{suffix}"
 
 
+_WEEKDAY_KO = ["월", "화", "수", "목", "금", "토", "일"]
+
+
+def build_daily_report(period_start: datetime, period_end: datetime) -> str:
+    """period_start ~ period_end 기간의 거래 통계를 HTML 문자열로 반환."""
+    records = []
+    try:
+        if os.path.exists(TRADE_LOG_FILE):
+            with open(TRADE_LOG_FILE, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        r = json.loads(line)
+                    except Exception:
+                        continue
+                    if r.get("type") in ("hold",):
+                        continue
+                    try:
+                        ts = datetime.fromisoformat(
+                            f"{r['date']}T{r['time']}"
+                        ).replace(tzinfo=_KST)
+                    except Exception:
+                        continue
+                    if period_start <= ts <= period_end:
+                        records.append(r)
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        logging.warning("일일 보고서 파일 읽기 실패: %s", e)
+        return "⚠️ 거래 기록을 읽는 중 오류가 발생했습니다."
+
+    live_recs = [r for r in records if r.get("live")]
+    sim_recs  = [r for r in records if not r.get("live")]
+
+    def _bucket_html(recs: list) -> str:
+        buys      = [r for r in recs if r.get("type") == "buy"]
+        sells     = [r for r in recs if r.get("type") == "sell"]
+        buy_fails = [r for r in recs if r.get("type") == "buy_fail"]
+        sel_fails = [r for r in recs if r.get("type") == "sell_fail"]
+
+        if not buys and not sells and not buy_fails and not sel_fails:
+            return "거래 없음"
+
+        lines = []
+
+        fail_suffix = f"(실패 {len(sel_fails)}건)" if sel_fails else ""
+        sell_warn   = "⚠️ " if sel_fails else ""
+        sell_str    = f"매수 {len(buys)}건 · {sell_warn}매도 {len(sells)}건"
+        if fail_suffix:
+            sell_str += f" {fail_suffix}"
+        if buy_fails:
+            sell_str += f" · 매수실패 {len(buy_fails)}건"
+        lines.append(sell_str)
+
+        if sells:
+            pcts  = [float(s.get("profit_pct") or 0) for s in sells]
+            wins  = sum(1 for p in pcts if p > 0)
+            losses = len(pcts) - wins
+            win_rate = wins / len(pcts) * 100
+            lines.append(f"승률: {wins}승 {losses}패 ({win_rate:.1f}%)")
+
+            realized = sum(
+                float(s.get("amount") or 0) * float(s.get("profit_pct") or 0) / 100
+                for s in sells
+            )
+            sign = "+" if realized >= 0 else ""
+            lines.append(f"실현손익: {sign}{realized:,.0f}원")
+
+            avg_pct  = sum(pcts) / len(pcts)
+            best_pct = max(pcts)
+            worst_pct = min(pcts)
+            lines.append(
+                f"평균수익률: {avg_pct:+.2f}% | 최고 {best_pct:+.2f}% | 최저 {worst_pct:+.2f}%"
+            )
+
+        return "\n".join(lines)
+
+    # 보유 포지션 수 (락 보호)
+    with _trading_lock:
+        pos_count = len(_trading_state["positions"])
+
+    # 헤더
+    report_dt  = period_end + timedelta(seconds=1)   # 발송 시각 (= period_end + 1s = 당일 09:00)
+    weekday_ko = _WEEKDAY_KO[report_dt.weekday()]
+    header = (
+        f"📋 <b>일일 보고서</b> · {report_dt.month}월 {report_dt.day}일({weekday_ko})\n"
+        f"📅 기간: {period_start.month}/{period_start.day} 09:00"
+        f" ~ {period_end.month}/{period_end.day} 08:59"
+    )
+
+    sep = "━━━━━━━━━━━━━━━"
+    sim_html  = _bucket_html(sim_recs)
+    live_html = _bucket_html(live_recs)
+
+    parts = [
+        header,
+        sep,
+        f"🎮 <b>시뮬레이션</b>\n{sim_html}",
+        sep,
+        f"💰 <b>실거래</b>\n{live_html}",
+        sep,
+        f"📌 보유 포지션: {pos_count}종목",
+    ]
+    return "\n".join(parts)
+
+
 def auto_trade_worker():
     while True:
         # 거래 이력 보존 한도 정리 (하루 1회만 실제 수행)

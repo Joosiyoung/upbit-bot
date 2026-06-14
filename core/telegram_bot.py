@@ -562,7 +562,30 @@ def telegram_worker():
             time.sleep(10)
 
 
+def _daily_report_worker():
+    """매일 09:00 KST 일일 보고서 전송 데몬."""
+    while True:
+        now = datetime.now(_KST)
+        target = now.replace(hour=9, minute=0, second=0, microsecond=0)
+        if now >= target:
+            target += timedelta(days=1)
+        time.sleep(max(0, (target - now).total_seconds()))
+
+        # 기간: 전일 09:00 ~ 당일 08:59:59
+        period_end   = target - timedelta(seconds=1)
+        period_start = target - timedelta(days=1)
+
+        try:
+            from core.trader import build_daily_report
+            msg = build_daily_report(period_start, period_end)
+            _send_message(msg)
+        except Exception:
+            logging.exception("일일 보고서 생성/전송 오류")
+
+
 def start_telegram_bot():
     """명령 봇 스레드 기동 (앱 시작 시 1회 호출)"""
     t = threading.Thread(target=telegram_worker, daemon=True, name="telegram-command-bot")
     t.start()
+    r = threading.Thread(target=_daily_report_worker, daemon=True, name="telegram-daily-report")
+    r.start()
