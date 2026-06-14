@@ -98,34 +98,71 @@ def _load_state():
         logging.exception("주식 상태 파일 로드 오류")
 
 
+def _stock_market_notifier():
+    """장 시작(09:00) 알림 전용 데몬. 시뮬 상태와 무관하게 항상 동작."""
+    market_was_open = False
+    while True:
+        try:
+            market_now = is_market_hours()
+            if market_now and not market_was_open:
+                market_was_open = True
+                notifier.send(
+                    "<b>🔔 장 시작</b> — 평일 09:00 KST\n"
+                    "/stock_start_sim 으로 주식 시뮬을 시작하세요."
+                )
+            elif not market_now and market_was_open:
+                market_was_open = False
+        except Exception:
+            logging.exception("장 시작 알림 워커 오류")
+        time.sleep(30)
+
+
 def start_stock_trading(budget_krw: float = 0.0) -> str:
+    if not is_market_hours():
+        return (
+            "⚠️ 현재 장 시간이 아닙니다 (평일 09:00~15:30).\n"
+            "장 중에 /stock_start_sim 을 다시 입력해주세요."
+        )
+
     with _stock_lock:
         if _stock_trading_state["enabled"]:
             return "이미 주식 시뮬 매매가 실행 중입니다."
+        has_positions = bool(_stock_positions)
+        saved_krw = _stock_trading_state["sim_krw"]
 
-    if budget_krw <= 0:
-        from core.stock.kis_client import KisClient
-        client = KisClient(is_sandbox=config.KIS_IS_SANDBOX)
-        budget_krw = client.get_cash_balance()
+    if has_positions:
+        effective_budget = saved_krw
+    else:
         if budget_krw <= 0:
-            return "KIS 잔고 조회 실패 또는 주문가능현금 0원입니다. 금액을 직접 입력하세요.\n예: /stock_start_sim 1000000"
+            from core.stock.kis_client import KisClient
+            client = KisClient(is_sandbox=config.KIS_IS_SANDBOX)
+            budget_krw = client.get_cash_balance()
+            if budget_krw <= 0:
+                return (
+                    "KIS 잔고 조회 실패 또는 주문가능현금 0원입니다. "
+                    "금액을 직접 입력하세요.\n예: /stock_start_sim 1000000"
+                )
+        effective_budget = budget_krw
 
     with _stock_lock:
         if _stock_trading_state["enabled"]:
             return "이미 주식 시뮬 매매가 실행 중입니다."
         _stock_trading_state["enabled"] = True
         _stock_trading_state["mode"] = "sim"
-        _stock_trading_state["sim_krw"] = budget_krw
-        _stock_trading_state["started_at"] = datetime.now(_KST)
-        _stock_positions.clear()
+        if not has_positions:
+            _stock_trading_state["sim_krw"] = effective_budget
+            _stock_trading_state["started_at"] = datetime.now(_KST)
         _save_state()
 
     t = threading.Thread(target=_stock_worker, daemon=True, name="stock-worker")
     t.start()
-    msg = f"주식 시뮬 매매 시작 — 예산 {budget_krw:,.0f}원"
-    if not is_market_hours():
-        msg += "\n⚠️ 현재 장 시간이 아닙니다 (평일 09:00~15:30). 장 시작 시 자동으로 매매를 시작합니다."
-    notifier.notify_event("주식 시뮬 매매 시작", f"예산 {budget_krw:,.0f}원")
+
+    pos_count = len(_stock_positions)
+    if pos_count > 0:
+        msg = f"주식 시뮬 재개 — 기존 포지션 {pos_count}종목, 잔고 {effective_budget:,.0f}원"
+    else:
+        msg = f"주식 시뮬 시작 — 예산 {effective_budget:,.0f}원"
+    notifier.notify_event("주식 시뮬 매매 시작", msg)
     return msg
 
 
@@ -255,20 +292,13 @@ def _stock_worker():
     from core.analysis import score_signal, action_from_score
 
     close_h, close_m = (int(x) for x in config.STOCK_BUY_CLOSE_TIME.split(":"))
-    market_was_open = False
+    market_was_open = True  # 장 중에만 시작 가능하므로 True로 초기화
 
     while _stock_trading_state["enabled"]:
         try:
             market_now = is_market_hours()
 
-            if market_now and not market_was_open:
-                market_was_open = True
-                notifier.send(
-                    f"<b>🔔 장 시작</b> — 주식 시뮬 매매 활성화\n"
-                    f"슬롯: {len(_stock_positions)}/{config.STOCK_MAX_POSITIONS}  "
-                    f"잔고: {_stock_trading_state['sim_krw']:,.0f}원"
-                )
-            elif not market_now and market_was_open:
+            if not market_now and market_was_open:
                 market_was_open = False
                 report = _build_stock_daily_report()
                 notifier.send(report)
