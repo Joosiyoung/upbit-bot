@@ -93,7 +93,10 @@ def build_analysis_data():
 
         ticker    = f"KRW-{currency}"
         avg_price = float(b.get('avg_buy_price', 0))
-        warn_px   = (not active_mkts) or (ticker in active_mkts)
+        # 마켓 목록이 있으면 해당 티커가 활성인지로 warn 결정.
+        # 목록이 없을 때(ai_worker 아직 첫 실행 전)는 warn 억제 — 상장폐지 여부를 모르므로
+        # WARNING을 쏟아내는 것은 의미 없고, 목록이 들어오면 자동으로 정상화됨.
+        warn_px   = bool(active_mkts) and (ticker in active_mkts)
         current   = client.get_current_price(ticker, warn=warn_px)
         if not current:
             continue
@@ -110,7 +113,8 @@ def build_analysis_data():
             if df.empty:
                 continue
             df = add_all_indicators(df)
-            ind = get_latest_indicators(df)
+            # 일봉·4h·1h는 진행 중인 봉이 포함되므로 완성봉(iloc[-2]) 기준으로 신호 산출
+            ind = get_latest_indicators(df, completed=True)
             sup, res = support_resistance(df)
             sc = score_signal(ind)
             scores[interval] = sc
@@ -140,11 +144,11 @@ def build_analysis_data():
             }
             time.sleep(0.1)  # API rate limit 방어
 
-        # 가중 합산 점수
+        # 가중 합산 점수 (진입 스캔과 동일한 가중치 체계: 일봉 2.5·중기 2·단기 0.5)
         total_score = (
-            scores.get('day', 0) * 2 +
-            scores.get('minute240', 0) * 1.5 +
-            scores.get('minute60', 0) * 1
+            scores.get('day', 0) * 2.5 +
+            scores.get('minute240', 0) * 2 +
+            scores.get('minute60', 0) * 0.5
         )
         action_text, action_class = action_from_score(total_score)
 
@@ -270,17 +274,19 @@ def build_market_data():
             # (다른 타임프레임 데이터를 잘못된 봉 단위 지표로 사용하는 것 방지)
             if not df_1h.empty:
                 df_1h = add_all_indicators(df_1h)
-                ind_1h = get_latest_indicators(df_1h)
+                # 1시간봉은 완성봉(iloc[-2]) 기준 — 진행 중 봉 기반 리페인팅 방지
+                ind_1h = get_latest_indicators(df_1h, completed=True)
             else:
                 ind_1h = _neutral_indicators()
 
             if not df_1d.empty:
                 df_1d = add_all_indicators(df_1d)
-                ind_1d = get_latest_indicators(df_1d)
+                # 일봉도 완성봉 기준 — 당일 봉이 미완성 상태에서 신호가 바뀌는 문제 방지
+                ind_1d = get_latest_indicators(df_1d, completed=True)
             else:
                 ind_1d = _neutral_indicators()
 
-            # 1분봉 기준 종합 점수
+            # 종합 점수 (1m은 타이밍용으로 최신봉 사용, 1h·1d는 완성봉 기준)
             sc_1m = score_signal(ind_1m)
             sc_1h = score_signal(ind_1h)
             sc_1d = score_signal(ind_1d)

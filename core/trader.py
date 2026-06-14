@@ -96,7 +96,8 @@ def _market_regime_ok(client: UpbitClient, now_dt: datetime) -> tuple[bool, str]
         df = client.get_ohlcv(config.MARKET_REGIME_PROXY, "day", 200)
         if df is not None and not df.empty:
             df = add_all_indicators(df)
-            ind = get_latest_indicators(df)
+            # 레짐 판정도 완성봉 기준 — 당일 봉이 미완성일 때 신호가 바뀌는 리페인팅 방지
+            ind = get_latest_indicators(df, completed=True)
             es, em = ind.get("ema_short", 0), ind.get("ema_mid", 0)
             if es < em:
                 ok = False
@@ -821,7 +822,9 @@ def run_auto_trade():
                     buy_reason += f" {err}"
                 _buy_fail.pop(ticker, None)
             else:
-                actual_qty   = amount / entry_price
+                # 시뮬 수수료: 매수 시 수수료(FEE_RATE)가 차감된 수량으로 진입
+                # (sim_krw에서 amount*(1+FEE_RATE)를 뺐으므로 수량도 동일 기준으로 계산)
+                actual_qty   = amount * (1 - FEE_RATE) / entry_price
                 stored_entry = entry_price
 
             _log_trade({
@@ -943,7 +946,7 @@ def run_auto_trade():
                     add_reason += f" {err}"
                 _buy_fail.pop(ticker, None)
             else:
-                actual_qty2 = amount2 / current_price
+                actual_qty2 = amount2 * (1 - FEE_RATE) / current_price
                 fill_price2 = current_price
 
             _log_trade({

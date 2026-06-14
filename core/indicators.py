@@ -104,13 +104,23 @@ def add_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def get_latest_indicators(df: pd.DataFrame) -> dict:
-    """최신 지표 값 반환"""
+def get_latest_indicators(df: pd.DataFrame, completed: bool = False) -> dict:
+    """지표 값 반환.
+
+    completed=True: 마지막 완성봉(iloc[-2]) 기준 — 일봉·시간봉처럼 아직 진행 중인
+    봉이 포함된 경우 리페인팅(live 신호와 백테스트 신호 괴리)을 방지하기 위해 사용.
+    completed=False(기본): 최신봉(iloc[-1]) 기준 — 1분봉처럼 거의 완성된 봉 또는
+    실시간 가격을 즉시 반영해야 하는 경우.
+    """
     if df.empty:
         return {}
 
-    last = df.iloc[-1]
-    prev = df.iloc[-2] if len(df) > 1 else last
+    idx = -2 if completed else -1
+    # completed=True 시 최소 2개 봉이 필요; 부족하면 마지막 봉으로 대체
+    if completed and len(df) < 2:
+        idx = -1
+    last = df.iloc[idx]
+    prev = df.iloc[idx - 1] if len(df) > abs(idx) else last
 
     return {
         "close": last["close"],
