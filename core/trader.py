@@ -159,6 +159,13 @@ def _load_state():
         for k in _risk_state:
             if k in risk:
                 _risk_state[k] = risk[k]
+        # 날짜가 바뀐 채로 재시작된 경우 일일 카운터 리셋
+        today = datetime.now().strftime("%Y-%m-%d")
+        if _risk_state["date"] != today:
+            _risk_state["date"]               = today
+            _risk_state["daily_realized_krw"] = 0.0
+            _risk_state["daily_blocked"]      = False
+            _risk_state["consec_stoploss"]    = 0
         if _trading_state["enabled"]:
             mode = "실거래" if _trading_state["live"] else "시뮬레이션"
             _trading_state["status_msg"] = f"재시작 — 이전 {mode} 상태 복원, 자동 재개"
@@ -707,11 +714,11 @@ def run_auto_trade():
     else:
         per_coin = 0
 
-    # Fear & Greed 양극단 모두 신규 매수 차단 (lazy import)
+    # Fear & Greed 양극단 모두 신규 매수 차단 (시뮬에서는 데이터 축적을 위해 건너뜀)
     from core.ai_analysis import get_fear_greed
     fg = get_fear_greed()
     fg_block = None
-    if fg is not None:
+    if live_mode and fg is not None:
         if fg["value"] >= config.FEAR_GREED_GREED_MAX:
             fg_block = f"F&G {fg['value']} 극단탐욕"
         elif fg["value"] <= config.FEAR_GREED_FEAR_MIN:
