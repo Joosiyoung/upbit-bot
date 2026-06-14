@@ -210,6 +210,16 @@ def api_trading_status():
             "log":        list(_trading_state["log"]),
         }
 
+    # market_map에 없는 포지션 티커(시뮬 전용 보유 등)는 직접 현재가 조회
+    missing = [t for t in positions_raw if t not in market_map]
+    if missing:
+        from core.upbit_client import UpbitClient
+        _uc = UpbitClient()
+        for t in missing:
+            p = _uc.get_current_price(t, warn=False)
+            if p:
+                market_map[t] = p
+
     positions_out = {}
     for ticker, pos in positions_raw.items():
         current = market_map.get(ticker)
