@@ -2,6 +2,24 @@ const REFRESH_MS = 30000;
 let countdownId    = null;
 let tradingActive  = false;
 
+// ── 대시보드 인증 토큰 ──
+function _getToken() { return sessionStorage.getItem('dash_token') || ''; }
+function _authHeaders() {
+  const t = _getToken();
+  return t ? {'Content-Type': 'application/json', 'X-Dashboard-Token': t}
+           : {'Content-Type': 'application/json'};
+}
+async function _authedPost(url, body) {
+  let res = await fetch(url, {method: 'POST', headers: _authHeaders(), body: JSON.stringify(body ?? {})});
+  if (res.status === 401) {
+    const token = prompt('대시보드 토큰을 입력하세요 (DASHBOARD_TOKEN):');
+    if (!token) return res;
+    sessionStorage.setItem('dash_token', token);
+    res = await fetch(url, {method: 'POST', headers: _authHeaders(), body: JSON.stringify(body ?? {})});
+  }
+  return res;
+}
+
 // ── 탭 이벤트 위임 ──
 document.body.addEventListener('click', e => {
   if (!e.target.classList.contains('tf-btn')) return;
@@ -307,7 +325,7 @@ async function manualRefresh() {
     const prevHoldingsAt = snap1.updated_at || '';
     const prevMarketAt   = snap2.updated_at || '';
 
-    await fetch('/api/refresh', {method:'POST'});
+    await _authedPost('/api/refresh');
 
     let tries = 0;
     manualRefreshPollId = setInterval(async () => {
@@ -569,11 +587,7 @@ async function tradingStart(live) {
       const v = (document.getElementById('sim-budget-input')?.value || '').trim();
       if (v !== '') body.sim_budget = v;
     }
-    const res = await fetch('/api/trading/start', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(body),
-    });
+    const res = await _authedPost('/api/trading/start', body);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || ('HTTP ' + res.status));
@@ -607,11 +621,7 @@ async function tradingStop(mode) {
     tradingActive = false;
     clearInterval(countdownId);
     document.getElementById('countdown').textContent = '';
-    await fetch('/api/trading/stop', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({mode}),
-    });
+    await _authedPost('/api/trading/stop', {mode});
     await fetchTradingStatus();
   } catch(e) {
     document.getElementById('trade-status-msg').textContent = '중지 오류: ' + e.message;

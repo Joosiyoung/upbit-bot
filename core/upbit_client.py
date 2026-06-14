@@ -174,8 +174,13 @@ class UpbitClient:
                 executed = float(order.get("executed_volume") or 0)
                 if state in ("done", "cancel") and executed > 0:
                     trades = order.get("trades") or []
-                    total_vol   = sum(float(t.get("volume", 0)) for t in trades)
-                    total_funds = sum(float(t.get("price", 0)) * float(t.get("volume", 0)) for t in trades)
+                    total_vol, total_funds = 0.0, 0.0
+                    for t in trades:
+                        p, v = float(t.get("price", 0)), float(t.get("volume", 0))
+                        if p <= 0 or v <= 0:
+                            continue
+                        total_vol   += v
+                        total_funds += p * v
                     avg_price = (total_funds / total_vol) if total_vol > 0 else None
                     return {"executed_volume": executed, "avg_price": avg_price}
                 if state in ("done", "cancel"):

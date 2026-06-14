@@ -116,6 +116,11 @@ EMA_LONG = 50
 DASHBOARD_HOST = os.getenv("DASHBOARD_HOST", "127.0.0.1")
 DASHBOARD_PORT = int(os.getenv("DASHBOARD_PORT", "5000"))
 
+# ─── 대시보드 API 토큰 ───
+# 상태 변경 엔드포인트(/api/trading/start, /api/trading/stop, /api/refresh) 인증용.
+# 빈 문자열이면 경고만 출력하고 통과 (로컬 개발 편의). VPS에는 반드시 설정 권장.
+DASHBOARD_TOKEN = os.getenv("DASHBOARD_TOKEN", "")
+
 # ─── Telegram 알림 ───
 # @BotFather로 봇 생성 후 토큰 발급, 채팅 ID는 @userinfobot 등으로 확인.
 # 둘 다 설정돼야 알림이 활성화됨 (미설정 시 알림 기능 전체 비활성).

@@ -154,7 +154,22 @@ def _load_state():
         _trading_state["live"]              = bool(snap.get("live", config.LIVE_TRADING))
         _trading_state["sim_krw"]           = float(snap.get("sim_krw", 0.0))
         _trading_state["sim_initial_total"] = float(snap.get("sim_initial_total", 0.0))
-        _trading_state["positions"]         = snap.get("positions", {}) or {}
+        raw_positions = snap.get("positions", {}) or {}
+        valid_positions = {}
+        for ticker, pos in raw_positions.items():
+            entry_price = float(pos.get("entry_price", 0))
+            quantity    = float(pos.get("quantity", 0))
+            slot_count  = int(pos.get("slot_count", 1))
+            if entry_price <= 0 or quantity <= 0:
+                logging.warning("포지션 스키마 검증 실패 (폐기) [%s]: entry_price=%s quantity=%s",
+                                ticker, entry_price, quantity)
+                continue
+            if not (1 <= slot_count <= 10):
+                logging.warning("포지션 slot_count 범위 오류 (1로 보정) [%s]: slot_count=%d",
+                                ticker, slot_count)
+                pos = {**pos, "slot_count": 1}
+            valid_positions[ticker] = pos
+        _trading_state["positions"] = valid_positions
         _trading_state["log"]               = (snap.get("log", []) or [])[:_MAX_LOG]
         for t, iso in (snap.get("sell_cooldown", {}) or {}).items():
             try:

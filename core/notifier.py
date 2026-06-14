@@ -8,6 +8,7 @@
 Telegram API 장애가 봇 동작에 영향을 주지 않음.
 """
 
+import html
 import logging
 import queue
 import threading
@@ -109,7 +110,8 @@ def notify_trade(entry: dict):
         return
 
     mode = "실거래" if entry.get("live") else "시뮬레이션"
-    lines = [f"<b>{label}</b> · {entry.get('ticker', '-')} <i>({mode})</i>"]
+    ticker_safe = html.escape(str(entry.get("ticker", "-")))
+    lines = [f"<b>{label}</b> · {ticker_safe} <i>({mode})</i>"]
 
     profit_pct = entry.get("profit_pct")
     if etype == "sell" and profit_pct is not None:
@@ -125,7 +127,7 @@ def notify_trade(entry: dict):
 
     reason = entry.get("reason")
     if reason:
-        lines.append(f"사유: {reason}")
+        lines.append(f"사유: {html.escape(str(reason))}")
 
     lines.append(f"⏰ {entry.get('date', '')} {entry.get('time', '')}")
     send("\n".join(lines))
@@ -135,7 +137,7 @@ def notify_event(title: str, body: str = ""):
     """매매 시작/중지, 리스크 차단 등 시스템 이벤트 알림."""
     if not is_configured():
         return
-    msg = f"<b>{title}</b>"
+    msg = f"<b>{html.escape(title)}</b>"
     if body:
-        msg += f"\n{body}"
+        msg += f"\n{html.escape(body)}"
     send(msg)

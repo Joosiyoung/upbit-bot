@@ -45,7 +45,7 @@ def get_port_pids(port=5000):
     """포트 LISTENING PID 반환"""
     pids = []
     result = subprocess.run(
-        "netstat -aon", shell=True, capture_output=True, text=True
+        ["netstat", "-aon"], capture_output=True, text=True
     )
     for line in result.stdout.splitlines():
         if f":{port}" in line and "LISTENING" in line:
@@ -68,9 +68,8 @@ def kill_all():
     print(f"  종료 대상 PID: {targets}")
     for pid in targets:
         r = subprocess.run(
-            f"taskkill /PID {pid} /T /F",
-            shell=True, capture_output=True,
-            text=True, encoding="utf-8", errors="ignore"
+            ["taskkill", "/PID", str(pid), "/T", "/F"],
+            capture_output=True, text=True, encoding="utf-8", errors="ignore"
         )
         out = r.stdout.strip()
         print(f"  PID {pid}: {out if out else '종료 완료'}")
@@ -81,7 +80,7 @@ def kill_all():
     if remaining:
         print(f"  경고: 잔여 PID {remaining} 재시도")
         for pid in remaining:
-            subprocess.run(f"taskkill /PID {pid} /T /F", shell=True,
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
                            capture_output=True)
         time.sleep(1)
     else:

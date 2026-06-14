@@ -34,3 +34,7 @@ data/
 
 # 백업
 *.bak
+
+# Claude Code 프로젝트 메모리 (로컬 전용)
+CLAUDE.md
+.agents/

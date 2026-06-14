@@ -31,8 +31,12 @@ def _fetch_fear_greed() -> dict | None:
     try:
         resp = requests.get("https://api.alternative.me/fng/", timeout=5)
         data = resp.json()["data"][0]
+        value = int(data["value"])
+        if not (0 <= value <= 100):
+            logging.warning("Fear&Greed 값 범위 오류: %d (0~100 기대)", value)
+            return None
         return {
-            "value":          int(data["value"]),
+            "value":          value,
             "classification": data["value_classification"],
             "cached_at":      datetime.now(),
         }
@@ -41,15 +45,23 @@ def _fetch_fear_greed() -> dict | None:
         return None
 
 
+_UPBIT_MARKETS_MIN = 20   # 이 미만이면 비정상 응답으로 간주
+
+
 def _check_upbit_active_markets() -> set:
-    """업비트 활성 KRW 마켓 목록 조회"""
+    """업비트 활성 KRW 마켓 목록 조회. 비정상 응답(20개 미만)이면 빈 집합 반환."""
     try:
         resp = requests.get("https://api.upbit.com/v1/market/all", timeout=5)
-        return {
+        markets = {
             item["market"]
             for item in resp.json()
             if item["market"].startswith("KRW-")
         }
+        if len(markets) < _UPBIT_MARKETS_MIN:
+            logging.warning("업비트 마켓 목록 비정상 (%d개 < 최소 %d개) — 캐시 유지",
+                            len(markets), _UPBIT_MARKETS_MIN)
+            return set()
+        return markets
     except Exception as e:
         logging.warning("업비트 마켓 조회 실패: %s", e)
         return set()

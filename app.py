@@ -1,6 +1,8 @@
+import functools
 import logging
 import logging.handlers
 import os
+import sys
 import threading
 from flask import Flask, render_template, jsonify, request
 
@@ -47,6 +49,33 @@ app = Flask(
     static_folder="web/static",
 )
 
+
+# ─────────────────────────────────────────────
+# 인증 데코레이터 (상태 변경 엔드포인트 전용)
+# ─────────────────────────────────────────────
+
+def _require_auth(f):
+    """X-Dashboard-Token 헤더 또는 ?token= 쿼리파라미터로 DASHBOARD_TOKEN 검증.
+    토큰 미설정 시(빈 문자열) 경고만 출력하고 통과 — 로컬 개발 편의.
+    """
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        token = config.DASHBOARD_TOKEN
+        if not token:
+            logging.warning("DASHBOARD_TOKEN 미설정 — 인증 없이 %s 허용 (로컬 개발 모드)", request.path)
+        else:
+            provided = (
+                request.headers.get("X-Dashboard-Token")
+                or request.args.get("token", "")
+            )
+            if provided != token:
+                return jsonify({"ok": False, "error": "Unauthorized"}), 401
+        # CSRF 완화: 커스텀 헤더 필요 엔드포인트이므로 Content-Type도 검증
+        if not request.is_json:
+            return jsonify({"ok": False, "error": "Content-Type must be application/json"}), 415
+        return f(*args, **kwargs)
+    return wrapper
+
 # ─────────────────────────────────────────────
 # 백그라운드 워커 시작
 # ─────────────────────────────────────────────
@@ -87,6 +116,7 @@ def api_market():
     return jsonify(data)
 
 @app.route('/api/refresh', methods=['POST'])
+@_require_auth
 def api_refresh():
     """수동 새로고침: 보유 코인 + 대표 코인 동시 갱신"""
     def _run_holdings():
@@ -119,6 +149,7 @@ def api_refresh():
 # ─────────────────────────────────────────────
 
 @app.route('/api/trading/start', methods=['POST'])
+@_require_auth
 def api_trading_start():
     data      = request.get_json(silent=True) or {}
     live_mode = data.get("live", False)
@@ -139,6 +170,7 @@ def api_trading_start():
 
 
 @app.route('/api/trading/stop', methods=['POST'])
+@_require_auth
 def api_trading_stop():
     """자동 매매 중지
     mode=liquidate: 봇 매수 코인 시장가 청산 후 중지 (기본)
@@ -204,9 +236,11 @@ def api_trading_status():
 
 
 if __name__ == '__main__':
+    if config.DASHBOARD_HOST == "0.0.0.0":
+        print("[ERROR] DASHBOARD_HOST=0.0.0.0 은 보안상 금지됩니다. "
+              "Tailscale IP(100.x.x.x) 또는 127.0.0.1 로 설정하세요.", file=sys.stderr)
+        sys.exit(1)
     start_workers()
-    # 대시보드에 인증이 없으므로 공인 IP(0.0.0.0)에 직접 바인딩하지 말 것.
-    # VPS에서는 DASHBOARD_HOST에 Tailscale IP(100.x.x.x)를 지정해 tailnet에서만 접속.
     try:
         # waitress: 24시간 운영용 프로덕션 WSGI 서버 (Flask 개발 서버 대체)
         from waitress import serve

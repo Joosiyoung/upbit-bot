@@ -208,7 +208,8 @@ def stop_trading(mode: str = "liquidate") -> dict:
 
     if mode == "liquidate":
         if sell_failed:
-            stop_msg = f"자동 매매 중지됨 (청산 실패 {len(sell_failed)}종목: {', '.join(sell_failed)} — 수동 확인 필요)"
+            failed_safe = html.escape(", ".join(sell_failed))
+            stop_msg = f"자동 매매 중지됨 (청산 실패 {len(sell_failed)}종목: {failed_safe} — 수동 확인 필요)"
         else:
             stop_msg = "자동 매매 중지됨 (포지션 청산 완료)"
     else:
