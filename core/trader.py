@@ -12,6 +12,12 @@ from datetime import datetime, timedelta, timezone
 from core.upbit_client import UpbitClient
 from core import config
 from core import notifier
+
+_KST = config.KST
+
+def _as_kst(dt: datetime) -> datetime:
+    """naive datetime을 KST(+09:00)로 간주. already-aware는 그대로."""
+    return dt if dt.tzinfo else dt.replace(tzinfo=_KST)
 from core.data_builder import (
     _cache, _cache_lock,
     _market_cache, _market_lock,
@@ -117,7 +123,7 @@ def _save_state_locked():
             "log":               _trading_state["log"],
             "sell_cooldown":     {t: dt.isoformat() for t, dt in _sell_cooldown.items()},
             "risk":              dict(_risk_state),
-            "saved_at":          datetime.now().isoformat(),
+            "saved_at":          datetime.now(_KST).isoformat(),
         }
         tmp = STATE_FILE + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
@@ -152,7 +158,7 @@ def _load_state():
         _trading_state["log"]               = (snap.get("log", []) or [])[:_MAX_LOG]
         for t, iso in (snap.get("sell_cooldown", {}) or {}).items():
             try:
-                _sell_cooldown[t] = datetime.fromisoformat(iso)
+                _sell_cooldown[t] = _as_kst(datetime.fromisoformat(iso))
             except Exception:
                 pass
         risk = snap.get("risk") or {}
@@ -160,7 +166,7 @@ def _load_state():
             if k in risk:
                 _risk_state[k] = risk[k]
         # 날짜가 바뀐 채로 재시작된 경우 일일 카운터 리셋
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = datetime.now(_KST).strftime("%Y-%m-%d")
         if _risk_state["date"] != today:
             _risk_state["date"]               = today
             _risk_state["daily_realized_krw"] = 0.0
@@ -183,7 +189,7 @@ def _prune_trade_history():
     days = config.TRADE_HISTORY_RETENTION_DAYS
     if days <= 0 or not os.path.exists(TRADE_LOG_FILE):
         return
-    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    cutoff = (datetime.now(_KST) - timedelta(days=days)).strftime("%Y-%m-%d")
     try:
         kept, dropped = [], 0
         with open(TRADE_LOG_FILE, encoding="utf-8") as f:
@@ -213,7 +219,7 @@ def _prune_trade_history():
 def _maybe_prune_trade_history():
     """하루 1회만 실제 정리하도록 일자 게이트. 워커 매 사이클에서 호출(대부분 즉시 반환)."""
     global _last_prune_date
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(_KST).strftime("%Y-%m-%d")
     if _last_prune_date == today:
         return
     _last_prune_date = today
@@ -221,7 +227,7 @@ def _maybe_prune_trade_history():
 
 
 def _log_trade(entry: dict):
-    entry.setdefault("date", datetime.now().strftime("%Y-%m-%d"))
+    entry.setdefault("date", datetime.now(_KST).strftime("%Y-%m-%d"))
     with _trading_lock:
         _trading_state["log"].insert(0, entry)
         _trading_state["log"] = _trading_state["log"][:_MAX_LOG]
@@ -242,7 +248,7 @@ def _log_trade(entry: dict):
 
 def _roll_risk_day_locked(total_assets: float):
     """날짜가 바뀌면 일일 리스크 카운터 리셋. _trading_lock 보유 상태에서 호출."""
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(_KST).strftime("%Y-%m-%d")
     if _risk_state["date"] != today:
         _risk_state["date"]               = today
         _risk_state["day_start_total"]    = total_assets
@@ -258,7 +264,7 @@ def _record_sell_locked(profit_pct: float, amount_krw: float, is_stoploss: bool)
     if is_stoploss:
         _risk_state["consec_stoploss"] += 1
         if _risk_state["consec_stoploss"] >= config.MAX_CONSECUTIVE_STOPLOSS:
-            until = datetime.now() + timedelta(minutes=config.GLOBAL_BUY_COOLDOWN_MIN)
+            until = datetime.now(_KST) + timedelta(minutes=config.GLOBAL_BUY_COOLDOWN_MIN)
             _risk_state["buy_block_until"] = until.isoformat()
             logging.warning("연속 손절 %d회 → %d분간 전역 매수 차단",
                             _risk_state["consec_stoploss"], config.GLOBAL_BUY_COOLDOWN_MIN)
@@ -288,7 +294,7 @@ def _buy_block_reason_locked() -> str | None:
     bbu = _risk_state["buy_block_until"]
     if bbu:
         try:
-            if datetime.now() < datetime.fromisoformat(bbu):
+            if datetime.now(_KST) < _as_kst(datetime.fromisoformat(bbu)):
                 return f"연속 손절 보호 쿨다운 (~{bbu[11:16]})"
             _risk_state["buy_block_until"] = None
         except Exception:
@@ -382,7 +388,7 @@ def _record_buy_fail(ticker: str):
     info = _buy_fail.setdefault(ticker, {"count": 0, "until": None})
     info["count"] += 1
     if info["count"] >= config.BUY_FAIL_LIMIT:
-        info["until"] = datetime.now() + timedelta(minutes=config.BUY_FAIL_COOLDOWN_MIN)
+        info["until"] = datetime.now(_KST) + timedelta(minutes=config.BUY_FAIL_COOLDOWN_MIN)
         info["count"] = 0
         logging.warning("[%s] 매수 연속 실패 %d회 → %d분 매수 금지",
                         ticker, config.BUY_FAIL_LIMIT, config.BUY_FAIL_COOLDOWN_MIN)
@@ -486,7 +492,7 @@ def _sync_live_positions(client, now_str: str):
                     "amount_krw":  round(vol * avg),
                     "quantity":    vol,
                     "entry_time":  now_str,
-                    "entry_ts":    datetime.now().isoformat(),
+                    "entry_ts":    datetime.now(_KST).isoformat(),
                     "bot_bought":  False,
                     "slot_count":  1,
                     "peak_price":  avg,
@@ -503,7 +509,7 @@ def _sync_live_positions(client, now_str: str):
 def run_auto_trade():
     """자동 매매 1사이클: 분산 매수 + 손절/익절/트레일링 관리"""
     client  = UpbitClient()
-    now_dt  = datetime.now()
+    now_dt  = datetime.now(_KST)
     now_str = now_dt.strftime("%H:%M:%S")
 
     with _trading_lock:
@@ -611,7 +617,7 @@ def run_auto_trade():
         entry_ts = pos.get("entry_ts")
         if entry_ts:
             try:
-                held_hours = (now_dt - datetime.fromisoformat(entry_ts)).total_seconds() / 3600
+                held_hours = (now_dt - _as_kst(datetime.fromisoformat(entry_ts))).total_seconds() / 3600
             except Exception:
                 pass
 
@@ -680,7 +686,7 @@ def run_auto_trade():
             _trading_state["positions"].pop(ticker, None)
             if not live_mode:
                 _trading_state["sim_krw"] += sell_proceeds
-            _sell_cooldown[ticker] = datetime.now()
+            _sell_cooldown[ticker] = datetime.now(_KST)
             _record_sell_locked(profit_pct, pos["amount_krw"], is_stoploss)
             _save_state_locked()
         sold_any = True
@@ -867,7 +873,7 @@ def run_auto_trade():
             if not last_ts:
                 continue
             try:
-                last_dt = datetime.fromisoformat(last_ts)
+                last_dt = _as_kst(datetime.fromisoformat(last_ts))
             except Exception:
                 continue
             if (now_dt - last_dt) < timedelta(hours=1):

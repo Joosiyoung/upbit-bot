@@ -32,6 +32,8 @@ from core import config
 from core import notifier
 from core import trading_control
 
+_KST = config.KST
+
 _API_BASE     = "https://api.telegram.org/bot{token}/{method}"
 _POLL_TIMEOUT = 30                     # long polling 대기 (초)
 _REQ_TIMEOUT  = _POLL_TIMEOUT + 10     # HTTP 타임아웃은 폴링 대기보다 길게
@@ -120,13 +122,13 @@ def _drain_old_updates():
 
 def _set_pending(action: str):
     _pending["action"]  = action
-    _pending["expires"] = datetime.now() + timedelta(seconds=_CONFIRM_TTL)
+    _pending["expires"] = datetime.now(_KST) + timedelta(seconds=_CONFIRM_TTL)
 
 
 def _take_pending() -> str | None:
     action, expires = _pending["action"], _pending["expires"]
     _pending["action"] = _pending["expires"] = None
-    if action and expires and datetime.now() <= expires:
+    if action and expires and datetime.now(_KST) <= expires:
         return action
     return None
 
@@ -156,7 +158,7 @@ def _handle_command(cmd: str, arg: str | None = None):
         else:
             # 인자 없음 → 가상자산 입력 유도 (다음 숫자 메시지로 시작)
             _pending_budget["active"]  = True
-            _pending_budget["expires"] = datetime.now() + timedelta(seconds=_CONFIRM_TTL)
+            _pending_budget["expires"] = datetime.now(_KST) + timedelta(seconds=_CONFIRM_TTL)
             reply("💰 <b>시뮬레이션 가상 자산 입력</b>\n"
                   "예산(원)을 숫자로 보내주세요. 예: <code>500000</code>\n"
                   "내 업비트 잔고로 시작하려면 <code>잔고</code> 라고 입력하세요. "
@@ -222,7 +224,7 @@ def telegram_worker():
                 # 가상자산 입력 대기 중 + 명령이 아닌 메시지 → 예산 입력으로 처리
                 if _pending_budget["active"] and not text.startswith("/"):
                     _pending_budget["active"] = False
-                    if _pending_budget["expires"] and datetime.now() > _pending_budget["expires"]:
+                    if _pending_budget["expires"] and datetime.now(_KST) > _pending_budget["expires"]:
                         notifier.send("⏰ 가상 자산 입력 시간이 만료됐습니다. /start_sim 으로 다시 시작하세요.")
                         continue
                     ok, budget, err = _parse_budget(text)

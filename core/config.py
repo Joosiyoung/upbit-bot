@@ -1,5 +1,9 @@
 import os
+from datetime import timezone, timedelta
 from dotenv import load_dotenv
+
+# 한국 표준시 (UTC+9) — datetime.now(KST) 로 사용
+KST = timezone(timedelta(hours=9))
 
 # .env는 프로젝트 루트에 위치 (이 파일은 core/ 안에 있으므로 상위 폴더 기준)
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

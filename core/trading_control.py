@@ -10,6 +10,8 @@ import html
 import logging
 from datetime import datetime
 
+_KST = config.KST
+
 from core import config
 from core import notifier
 from core.upbit_client import UpbitClient
@@ -37,7 +39,7 @@ def start_trading(live_mode: bool, sim_budget: float | None = None) -> dict:
             cur = "실거래" if _trading_state["live"] else "시뮬레이션"
             return {"ok": False, "error": f"이미 {cur} 매매가 실행 중입니다. 먼저 중지하세요."}
 
-    now_str = datetime.now().strftime("%H:%M:%S")
+    now_str = datetime.now(_KST).strftime("%H:%M:%S")
     client  = UpbitClient()
 
     # 기존 보유 코인(BLACKLIST 제외)을 초기 포지션으로 가져오기
@@ -73,7 +75,7 @@ def start_trading(live_mode: bool, sim_budget: float | None = None) -> dict:
                     "amount_krw":  round(volume * avg_price),
                     "quantity":    volume,
                     "entry_time":  now_str,
-                    "entry_ts":    datetime.now().isoformat(),
+                    "entry_ts":    datetime.now(_KST).isoformat(),
                     "bot_bought":  False,
                     "slot_count":  1,
                     "peak_price":  avg_price,
@@ -138,7 +140,7 @@ def stop_trading(mode: str = "liquidate") -> dict:
     mode=hold:      매도 없이 추적만 종료 후 중지
     """
     client  = UpbitClient()
-    now_str = datetime.now().strftime("%H:%M:%S")
+    now_str = datetime.now(_KST).strftime("%H:%M:%S")
 
     # 먼저 매매를 비활성화하고 epoch을 올려 진행 중인 사이클의 추가 주문을 차단
     with _trading_lock:
@@ -188,7 +190,7 @@ def stop_trading(mode: str = "liquidate") -> dict:
                     logging.warning("청산 매도 실패 [%s]: %s", ticker, err)
                 else:
                     with _trading_lock:
-                        _sell_cooldown[ticker] = datetime.now()   # 청산 후 즉시 재매수 방지
+                        _sell_cooldown[ticker] = datetime.now(_KST)   # 청산 후 즉시 재매수 방지
         else:
             # hold 모드: 실제 매도 없이 추적만 종료 → sell 로 기록하지 않음
             log_type = "hold"
