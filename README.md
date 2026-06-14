@@ -1,6 +1,6 @@
 # Upbit 자동매매 봇
 
-Flask + pyupbit 기반 코인 자동매매 봇. 대시보드(웹) + Telegram 원격 제어 + Oracle Cloud VPS 24시간 운영.
+Flask + pyupbit 기반 코인 자동매매 봇 + KIS API 기반 국내 주식 자동매매 봇. 대시보드(웹) + Telegram 원격 제어 + Oracle Cloud VPS 24시간 운영.
 
 ---
 
@@ -9,6 +9,17 @@ Flask + pyupbit 기반 코인 자동매매 봇. 대시보드(웹) + Telegram 원
 ```bash
 pip install -r requirements.txt
 python app.py          # 로컬 실행 → http://127.0.0.1:5000
+```
+
+백테스트:
+```bash
+# 코인 백테스트
+python scripts/backtest.py --tickers KRW-BTC,KRW-ETH --days 90
+python scripts/backtest.py --days 365   # 전체 종목
+
+# 주식 백테스트 (.env에 KIS_APP_KEY 설정 필요)
+python scripts/stock_backtest.py --tickers 005930,000660 --days 90
+python scripts/stock_backtest.py --days 90   # 전체 유니버스
 ```
 
 VPS 배포:
@@ -35,8 +46,13 @@ core/
   notifier.py            # Telegram 알림 발송
   upbit_client.py        # pyupbit 래퍼
   ai_analysis.py         # Fear & Greed 조회·캐시 워커
+  stock/                 # 국내 주식 자동매매 모듈 (KIS API)
+    kis_auth.py          # KIS OAuth2 토큰 관리
+    kis_client.py        # KIS API 래퍼 (OHLCV·현재가)
+    universe.py          # 매매 대상 종목 풀 (KOSPI 대형주)
 scripts/
   backtest.py            # 백테스터 (라이브 룰 동일 재현)
+  stock_backtest.py      # 주식 백테스터 (KIS OHLCV → score_signal)
 data/
   trade_history.jsonl    # 거래 이력 (365일 보존)
 logs/
@@ -69,6 +85,32 @@ logs/
 | `GLOBAL_BUY_COOLDOWN_MIN` | `120` | 연속 손절 후 전역 매수 금지 (분) |
 | `FEAR_GREED_GREED_MAX` | `80` | 극단 탐욕 임계값 → 매수 차단 |
 | `FEAR_GREED_FEAR_MIN` | `20` | 극단 공포 임계값 → 매수 차단 |
+
+### KIS API (국내 주식)
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `KIS_IS_SANDBOX` | `True` | True=모의투자, False=실거래. 이 값에 따라 아래 키 세트가 자동 선택됨 |
+| `KIS_APP_KEY_SANDBOX` | — | 모의투자 전용 앱 키 |
+| `KIS_APP_SECRET_SANDBOX` | — | 모의투자 앱 시크릿 |
+| `KIS_ACCOUNT_NO_SANDBOX` | — | 모의투자 계좌번호 (예: 50012345-01) |
+| `KIS_APP_KEY_REAL` | — | 실거래 앱 키 |
+| `KIS_APP_SECRET_REAL` | — | 실거래 앱 시크릿 |
+| `KIS_ACCOUNT_NO_REAL` | — | 실거래 계좌번호 (예: 50012345-01) |
+| `STOCK_MAX_POSITIONS` | `5` | 주식 최대 동시 보유 종목 수 |
+| `STOCK_BUY_SCORE_THRESHOLD` | `12` | 주식 진입 점수 임계치 |
+| `STOCK_MAX_LOSS_PERCENT` | `3.0` | 주식 손절 (%) |
+| `STOCK_TAKE_PROFIT_PERCENT` | `5.0` | 주식 익절 (%) |
+| `STOCK_TRAILING_START_PCT` | `3.0` | 주식 트레일링 스탑 활성화 수익률 (%) |
+| `STOCK_TRAILING_STOP_PCT` | `1.5` | 주식 고점 대비 하락 한도 (%) |
+| `STOCK_MAX_HOLD_DAYS` | `5` | 주식 최대 보유 일수 (영업일 기준) |
+| `STOCK_DAILY_LOSS_LIMIT_PCT` | `5.0` | 주식 일일 손실 한도 초과 시 당일 매수 차단 |
+| `STOCK_FEE_RATE` | `0.003` | 주식 시뮬 수수료율 (매수+매도+세금 합산) |
+| `STOCK_MAX_PRICE` | `200000` | 1주 가격이 이 금액 초과 시 진입 스킵. 투자금/MAX_POSITIONS를 기준으로 설정 |
+| `STOCK_BUY_CLOSE_TIME` | `15:20` | 신규 매수 마감 시각 (잔여 시간 진입 방지) |
+| `STOCK_REGIME_FILTER` | `True` | KOSPI EMA 하락 시 전 종목 매수 차단 |
+
+> **VPS 배포 후**: VPS `.env`는 git 미추적이므로 `KIS_APP_KEY_SANDBOX`, `KIS_APP_SECRET_SANDBOX`, `KIS_ACCOUNT_NO_SANDBOX` (또는 REAL 세트) 6개 변수를 VPS에서 직접 추가해야 KIS 기능이 활성화됩니다.
 
 ---
 

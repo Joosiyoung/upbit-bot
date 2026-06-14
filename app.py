@@ -95,6 +95,14 @@ def start_workers():
     from core.telegram_bot import start_telegram_bot
     start_telegram_bot()
 
+    # 주식 상태 복원 (재시작 시 이전 포지션 유지)
+    from core.stock.trader import _load_state as _load_stock_state, _stock_trading_state
+    _load_stock_state()
+    if _stock_trading_state.get("enabled"):
+        from core.stock.trader import _stock_worker
+        t = threading.Thread(target=_stock_worker, daemon=True, name="stock-worker")
+        t.start()
+
 # ─────────────────────────────────────────────
 # 라우트
 # ─────────────────────────────────────────────

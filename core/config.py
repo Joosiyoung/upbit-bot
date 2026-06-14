@@ -130,3 +130,35 @@ TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID", "")
 # Fear & Greed 설정
 FEAR_GREED_GREED_MAX = int(os.getenv("FEAR_GREED_GREED_MAX", "80"))  # 이 이상이면 극단 탐욕 → 신규 매수 차단
 FEAR_GREED_FEAR_MIN  = int(os.getenv("FEAR_GREED_FEAR_MIN",  "20"))  # 이 이하면 극단 공포(폭락장) → 신규 매수 차단
+
+# ─── KIS API (한국투자증권) ───
+KIS_IS_SANDBOX       = os.getenv("KIS_IS_SANDBOX", "True").lower() != "false"
+
+# 모의투자 자격증명
+KIS_APP_KEY_SANDBOX    = os.getenv("KIS_APP_KEY_SANDBOX",    "")
+KIS_APP_SECRET_SANDBOX = os.getenv("KIS_APP_SECRET_SANDBOX", "")
+KIS_ACCOUNT_NO_SANDBOX = os.getenv("KIS_ACCOUNT_NO_SANDBOX", "")
+
+# 실거래 자격증명
+KIS_APP_KEY_REAL    = os.getenv("KIS_APP_KEY_REAL",    "")
+KIS_APP_SECRET_REAL = os.getenv("KIS_APP_SECRET_REAL", "")
+KIS_ACCOUNT_NO_REAL = os.getenv("KIS_ACCOUNT_NO_REAL", "")
+
+# KIS_IS_SANDBOX에 따라 활성 자격증명 선택
+KIS_APP_KEY    = KIS_APP_KEY_SANDBOX    if KIS_IS_SANDBOX else KIS_APP_KEY_REAL
+KIS_APP_SECRET = KIS_APP_SECRET_SANDBOX if KIS_IS_SANDBOX else KIS_APP_SECRET_REAL
+KIS_ACCOUNT_NO = KIS_ACCOUNT_NO_SANDBOX if KIS_IS_SANDBOX else KIS_ACCOUNT_NO_REAL
+
+# ─── 주식 봇 파라미터 ───
+STOCK_MAX_POSITIONS        = int(os.getenv("STOCK_MAX_POSITIONS",        "5"))
+STOCK_BUY_SCORE_THRESHOLD  = float(os.getenv("STOCK_BUY_SCORE_THRESHOLD", "12"))
+STOCK_MAX_LOSS_PERCENT     = float(os.getenv("STOCK_MAX_LOSS_PERCENT",    "3.0"))
+STOCK_TAKE_PROFIT_PERCENT  = float(os.getenv("STOCK_TAKE_PROFIT_PERCENT", "5.0"))
+STOCK_TRAILING_START_PCT   = float(os.getenv("STOCK_TRAILING_START_PCT",  "3.0"))
+STOCK_TRAILING_STOP_PCT    = float(os.getenv("STOCK_TRAILING_STOP_PCT",   "1.5"))
+STOCK_MAX_HOLD_DAYS        = int(os.getenv("STOCK_MAX_HOLD_DAYS",         "5"))
+STOCK_DAILY_LOSS_LIMIT_PCT = float(os.getenv("STOCK_DAILY_LOSS_LIMIT_PCT","5.0"))
+STOCK_FEE_RATE             = float(os.getenv("STOCK_FEE_RATE",            "0.003"))
+STOCK_BUY_CLOSE_TIME       = os.getenv("STOCK_BUY_CLOSE_TIME",           "15:20")
+STOCK_REGIME_FILTER        = os.getenv("STOCK_REGIME_FILTER", "True").lower() != "false"
+STOCK_MAX_PRICE             = int(os.getenv("STOCK_MAX_PRICE", "200000"))

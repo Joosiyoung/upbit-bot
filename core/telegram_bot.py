@@ -65,6 +65,9 @@ _HELP_TEXT = (
     "/stop — 매매 중지 (보유 유지)\n"
     "/liquidate — 중지 + 전액 청산 (확인 필요)\n"
     "/confirm — 위험 명령 확인 (60초 이내)\n"
+    "/stock_status — 주식 매매 상태 조회\n"
+    "/stock_start_sim [금액] — 주식 시뮬 시작\n"
+    "/stock_stop — 주식 매매 중지\n"
     "/help — 이 도움말"
 )
 
@@ -101,7 +104,10 @@ _BOT_COMMANDS = [
     {"command": "start_live", "description": "실거래 시작 (확인 필요)"},
     {"command": "stop",       "description": "매매 중지 (보유 유지)"},
     {"command": "liquidate",  "description": "전액 청산 (확인 필요)"},
-    {"command": "help",       "description": "도움말"},
+    {"command": "help",            "description": "도움말"},
+    {"command": "stock_status",    "description": "주식 매매 상태 조회"},
+    {"command": "stock_start_sim", "description": "주식 시뮬 시작 [예산]"},
+    {"command": "stock_stop",      "description": "주식 매매 중지"},
 ]
 
 
@@ -497,6 +503,41 @@ def _handle_command(cmd: str, arg: str | None = None):
             result = trading_control.stop_trading(mode="liquidate")
             if not result.get("ok"):
                 reply(f"⚠️ {html.escape(result.get('error', '청산 실패'))}")
+
+    elif cmd == "/stock_status":
+        try:
+            from core.stock.trader import build_stock_status_msg
+            _send_message(build_stock_status_msg())
+        except Exception as e:
+            logging.exception("Telegram /stock_status 처리 오류")
+            reply(f"⚠️ 주식 상태 조회 오류: {html.escape(str(e)[:100])}")
+
+    elif cmd == "/stock_start_sim":
+        from core.stock.trader import _stock_trading_state, _stock_lock, start_stock_trading
+        with _stock_lock:
+            _enabled = _stock_trading_state["enabled"]
+        if _enabled:
+            reply("이미 주식 시뮬 매매가 실행 중입니다. /stock_stop 으로 중지하세요.")
+        elif arg:
+            raw = arg.strip().replace(",", "").replace("원", "")
+            try:
+                budget = float(raw)
+            except ValueError:
+                reply("⚠️ 금액이 올바르지 않습니다. 예: /stock_start_sim 1000000")
+                return
+            if budget <= 0:
+                reply("⚠️ 예산은 0보다 커야 합니다.")
+                return
+            result = start_stock_trading(budget)
+            reply(result)
+        else:
+            result = start_stock_trading()
+            reply(result)
+
+    elif cmd == "/stock_stop":
+        from core.stock.trader import stop_stock_trading
+        result = stop_stock_trading()
+        reply(result)
 
     else:
         reply(f"알 수 없는 명령: {html.escape(cmd)}\n/help 로 명령어를 확인하세요.")
