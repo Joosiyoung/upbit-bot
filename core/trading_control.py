@@ -10,11 +10,11 @@ import html
 import logging
 from datetime import datetime
 
-_KST = config.KST
-
 from core import config
 from core import notifier
 from core.upbit_client import UpbitClient
+
+_KST = config.KST
 from core.trader import (
     _trading_state, _trading_lock, _sell_cooldown,
     TRADING_BLACKLIST, MAX_POSITIONS, FEE_RATE,
