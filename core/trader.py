@@ -718,7 +718,11 @@ def run_auto_trade():
             fg_block = f"F&G {fg['value']} 극단공포"
 
     # 시장 레짐 필터 (BTC 일봉 하락 추세면 전 종목 신규 매수 차단)
-    regime_ok, regime_reason = _market_regime_ok(client, now_dt)
+    # 시뮬 모드에서는 레짐 필터를 건너뜀 — 실돈 위험 없으므로 데이터 축적 우선
+    if live_mode:
+        regime_ok, regime_reason = _market_regime_ok(client, now_dt)
+    else:
+        regime_ok, regime_reason = True, ""
 
     # 신규 매수 차단 사유 종합
     skip_buy_reason = None
