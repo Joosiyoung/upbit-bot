@@ -123,6 +123,8 @@ def start_stock_trading(budget_krw: float = 0.0) -> str:
     t = threading.Thread(target=_stock_worker, daemon=True, name="stock-worker")
     t.start()
     msg = f"주식 시뮬 매매 시작 — 예산 {budget_krw:,.0f}원"
+    if not is_market_hours():
+        msg += "\n⚠️ 현재 장 시간이 아닙니다 (평일 09:00~15:30). 장 시작 시 자동으로 매매를 시작합니다."
     notifier.notify_event("주식 시뮬 매매 시작", f"예산 {budget_krw:,.0f}원")
     return msg
 
@@ -178,6 +180,74 @@ def build_stock_status_msg() -> str:
     return "\n".join(lines)
 
 
+def _build_stock_daily_report() -> str:
+    today = datetime.now(_KST).date()
+    buys, sells, wins, rets = 0, 0, 0, []
+
+    if os.path.exists(STOCK_TRADE_LOG_FILE):
+        with open(STOCK_TRADE_LOG_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    rec = json.loads(line)
+                    ts = datetime.fromisoformat(rec["ts"])
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=_KST)
+                    if ts.date() != today:
+                        continue
+                    if rec.get("side") == "buy":
+                        buys += 1
+                    elif rec.get("side") == "sell":
+                        sells += 1
+                        r = rec.get("ret_pct")
+                        if r is not None:
+                            rets.append(r)
+                            if r > 0:
+                                wins += 1
+                except Exception:
+                    continue
+
+    win_rate = wins / len(rets) * 100 if rets else 0
+    avg_ret = sum(rets) / len(rets) if rets else 0
+
+    now = datetime.now(_KST)
+    weekdays_ko = ["월", "화", "수", "목", "금", "토", "일"]
+    dow = weekdays_ko[now.weekday()]
+
+    lines = [
+        f"<b>📊 주식 시뮬 일일 보고서</b>",
+        f"{now.strftime('%Y-%m-%d')} ({dow}) · 장 마감",
+        "",
+        f"<b>당일 매매</b>",
+        f"• 매수: {buys}건  매도: {sells}건",
+    ]
+    if rets:
+        total_pnl = sum(rets)
+        lines.append(f"• 승률: {win_rate:.0f}%  평균 수익률: {avg_ret:+.2f}%")
+        lines.append(f"• 실현 손익 합계: {total_pnl:+.2f}%")
+    else:
+        lines.append("• 실현 거래 없음")
+
+    with _stock_lock:
+        positions = dict(_stock_positions)
+        sim_krw = _stock_trading_state["sim_krw"]
+
+    if positions:
+        lines.append("")
+        lines.append(f"<b>보유 포지션 ({len(positions)}종목)</b>")
+        for code, pos in positions.items():
+            name = html.escape(pos.get("name", code))
+            held = _trading_days_held(pos.get("entry_time", datetime.now(_KST)))
+            lines.append(f"• {name}({html.escape(code)})  진입 {held}일차")
+    else:
+        lines.append("")
+        lines.append("보유 포지션 없음")
+
+    lines.append("")
+    lines.append(f"💵 시뮬 잔고: {sim_krw:,.0f}원")
+
+    return "\n".join(lines)
+
+
 def _stock_worker():
     from core.stock.kis_client import KisClient
     from core.stock.universe import get_universe
@@ -185,10 +255,30 @@ def _stock_worker():
     from core.analysis import score_signal, action_from_score
 
     close_h, close_m = (int(x) for x in config.STOCK_BUY_CLOSE_TIME.split(":"))
+    market_was_open = False
 
     while _stock_trading_state["enabled"]:
         try:
-            if not is_market_hours():
+            market_now = is_market_hours()
+
+            if market_now and not market_was_open:
+                market_was_open = True
+                notifier.send(
+                    f"<b>🔔 장 시작</b> — 주식 시뮬 매매 활성화\n"
+                    f"슬롯: {len(_stock_positions)}/{config.STOCK_MAX_POSITIONS}  "
+                    f"잔고: {_stock_trading_state['sim_krw']:,.0f}원"
+                )
+            elif not market_now and market_was_open:
+                market_was_open = False
+                report = _build_stock_daily_report()
+                notifier.send(report)
+                with _stock_lock:
+                    _stock_trading_state["enabled"] = False
+                    _save_state()
+                logging.info("장 마감 — 주식 시뮬 자동 종료")
+                break
+
+            if not market_now:
                 time.sleep(30)
                 continue
 
