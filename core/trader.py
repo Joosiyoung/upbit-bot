@@ -2,6 +2,7 @@
 # 자동 매매 — 상태, 로직, 워커
 # ─────────────────────────────────────────────
 
+import html
 import json
 import logging
 import os
@@ -1072,11 +1073,41 @@ def build_daily_report(period_start: datetime, period_end: datetime) -> str:
                 f"평균수익률: {avg_pct:+.2f}% | 최고 {best_pct:+.2f}% | 최저 {worst_pct:+.2f}%"
             )
 
+        lines.append("\n📥 매수 내역")
+        buy_lines = []
+        for r in buys:
+            ticker = html.escape(r.get("ticker", "-")).replace("KRW-", "")
+            amt = float(r.get("amount") or 0)
+            price = float(r.get("price") or 0)
+            buy_lines.append(f"  · {ticker}  {amt:,.0f}원 @ {price:,.0f}")
+        if len(buy_lines) <= 5:
+            lines.extend(buy_lines)
+        else:
+            lines.extend(buy_lines[:5])
+            lines.append(f"  (외 {len(buy_lines)-5}건)")
+
+        if sells:
+            lines.append("\n📤 매도 내역")
+            show_sells = sells[:5]
+            for s in show_sells:
+                ticker = html.escape(s.get("ticker", "-")).replace("KRW-", "")
+                pct = float(s.get("profit_pct") or 0)
+                amt = float(s.get("amount") or 0)
+                reason = html.escape(str(s.get("reason") or "-"))
+                sign = "+" if pct >= 0 else ""
+                lines.append(f"  · {ticker}  {sign}{pct:.2f}%  {reason}  {amt:,.0f}원")
+            if len(sells) > 5:
+                lines.append(f"  (외 {len(sells)-5}건)")
+
         return "\n".join(lines)
 
-    # 보유 포지션 수 (락 보호)
+    # 보유 포지션 및 잔고 (락 보호)
     with _trading_lock:
-        pos_count = len(_trading_state["positions"])
+        positions = dict(_trading_state["positions"])
+        is_sim    = not _trading_state["live"]
+        sim_krw   = _trading_state["sim_krw"] if is_sim else None
+
+    pos_count = len(positions)
 
     # 헤더
     report_dt  = period_end + timedelta(seconds=1)   # 발송 시각 (= period_end + 1s = 당일 09:00)
@@ -1091,6 +1122,27 @@ def build_daily_report(period_start: datetime, period_end: datetime) -> str:
     sim_html  = _bucket_html(sim_recs)
     live_html = _bucket_html(live_recs)
 
+    pos_section = f"📌 보유 포지션 ({pos_count}종목)"
+    if positions:
+        now_dt = datetime.now(_KST)
+        pos_lines = []
+        for ticker, pos in positions.items():
+            short = html.escape(ticker).replace("KRW-", "")
+            entry_price = float(pos.get("entry_price") or 0)
+            held_str = ""
+            try:
+                entry_dt = _as_kst(datetime.fromisoformat(pos["entry_ts"]))
+                delta = now_dt - entry_dt
+                h, m = divmod(int(delta.total_seconds()) // 60, 60)
+                held_str = f" · {h}h{m:02d}m"
+            except Exception:
+                pass
+            pos_lines.append(f"  · {short}  진입가 {entry_price:,.0f}{held_str}")
+        pos_section += "\n" + "\n".join(pos_lines)
+
+    if sim_krw is not None:
+        pos_section += f"\n\n💰 가상잔고: {sim_krw:,.0f}원"
+
     parts = [
         header,
         sep,
@@ -1098,7 +1150,7 @@ def build_daily_report(period_start: datetime, period_end: datetime) -> str:
         sep,
         f"💰 <b>실거래</b>\n{live_html}",
         sep,
-        f"📌 보유 포지션: {pos_count}종목",
+        pos_section,
     ]
     return "\n".join(parts)
 
