@@ -6,6 +6,7 @@
 이 모듈만 바라보게 하여 순환 import를 방지.
 """
 
+import html
 import logging
 from datetime import datetime
 
@@ -253,7 +254,7 @@ def status_summary() -> str:
         lines.append(f"<b>상태: 매매 중</b> ({mode})")
     else:
         lines.append("<b>상태: 중지됨</b>")
-    lines.append(f"메시지: {status_msg}")
+    lines.append(f"메시지: {html.escape(status_msg)}")
     if last_check:
         lines.append(f"마지막 체크: {last_check}")
 
