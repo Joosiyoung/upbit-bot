@@ -141,3 +141,58 @@ def notify_event(title: str, body: str = ""):
     if body:
         msg += f"\n{html.escape(body)}"
     send(msg)
+
+
+# ─────────────────────────────────────────────
+# 주식 봇 전용 알림 (TELEGRAM_STOCK_BOT_TOKEN)
+# ─────────────────────────────────────────────
+
+_stock_queue: "queue.Queue[str]" = queue.Queue(maxsize=_QUEUE_MAX)
+_stock_worker_started = False
+_stock_worker_lock = threading.Lock()
+
+
+def is_stock_configured() -> bool:
+    return bool(config.TELEGRAM_STOCK_BOT_TOKEN and config.TELEGRAM_CHAT_ID)
+
+
+def _stock_notifier_worker():
+    url = _API_URL.format(token=config.TELEGRAM_STOCK_BOT_TOKEN)
+    while True:
+        text = _stock_queue.get()
+        try:
+            resp = requests.post(url, json={
+                "chat_id": config.TELEGRAM_CHAT_ID,
+                "text": text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
+            }, timeout=_SEND_TIMEOUT)
+            if resp.status_code != 200:
+                logging.warning("Telegram(주식) 전송 실패 (%d): %s",
+                                resp.status_code, resp.text[:200])
+        except Exception as e:
+            logging.warning("Telegram(주식) 전송 오류: %s", e)
+        finally:
+            _stock_queue.task_done()
+
+
+def _ensure_stock_worker():
+    global _stock_worker_started
+    with _stock_worker_lock:
+        if not _stock_worker_started:
+            t = threading.Thread(target=_stock_notifier_worker, daemon=True,
+                                 name="telegram-stock-notifier")
+            t.start()
+            _stock_worker_started = True
+
+
+def send_stock(text: str):
+    """주식 봇 알림 전송 (비동기). 미설정 시 코인 봇으로 fallback."""
+    if not is_stock_configured():
+        send(text)   # fallback: 주식 토큰 없으면 코인 봇으로
+        return
+    _ensure_stock_worker()
+    try:
+        _stock_queue.put_nowait(text)
+    except queue.Full:
+        logging.warning("Telegram(주식) 알림 큐 포화 → 메시지 폐기")

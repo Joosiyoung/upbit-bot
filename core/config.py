@@ -124,8 +124,10 @@ DASHBOARD_TOKEN = os.getenv("DASHBOARD_TOKEN", "")
 # ─── Telegram 알림 ───
 # @BotFather로 봇 생성 후 토큰 발급, 채팅 ID는 @userinfobot 등으로 확인.
 # 둘 다 설정돼야 알림이 활성화됨 (미설정 시 알림 기능 전체 비활성).
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_BOT_TOKEN       = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_STOCK_BOT_TOKEN = os.getenv("TELEGRAM_STOCK_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID         = os.getenv("TELEGRAM_CHAT_ID", "")
+# TELEGRAM_STOCK_CHAT_ID는 별도로 두지 않음 — TELEGRAM_CHAT_ID와 동일하게 사용
 
 # Fear & Greed 설정
 FEAR_GREED_GREED_MAX = int(os.getenv("FEAR_GREED_GREED_MAX", "80"))  # 이 이상이면 극단 탐욕 → 신규 매수 차단

@@ -65,9 +65,6 @@ _HELP_TEXT = (
     "/stop — 매매 중지 (보유 유지)\n"
     "/liquidate — 중지 + 전액 청산 (확인 필요)\n"
     "/confirm — 위험 명령 확인 (60초 이내)\n"
-    "/stock_status — 주식 매매 상태 조회\n"
-    "/stock_start_sim [금액] — 주식 시뮬 시작\n"
-    "/stock_stop — 주식 매매 중지\n"
     "/help — 이 도움말"
 )
 
@@ -105,9 +102,6 @@ _BOT_COMMANDS = [
     {"command": "stop",       "description": "매매 중지 (보유 유지)"},
     {"command": "liquidate",  "description": "전액 청산 (확인 필요)"},
     {"command": "help",            "description": "도움말"},
-    {"command": "stock_status",    "description": "주식 매매 상태 조회"},
-    {"command": "stock_start_sim", "description": "주식 시뮬 시작 [예산]"},
-    {"command": "stock_stop",      "description": "주식 매매 중지"},
 ]
 
 
@@ -504,41 +498,6 @@ def _handle_command(cmd: str, arg: str | None = None):
             if not result.get("ok"):
                 reply(f"⚠️ {html.escape(result.get('error', '청산 실패'))}")
 
-    elif cmd == "/stock_status":
-        try:
-            from core.stock.trader import build_stock_status_msg
-            _send_message(build_stock_status_msg())
-        except Exception as e:
-            logging.exception("Telegram /stock_status 처리 오류")
-            reply(f"⚠️ 주식 상태 조회 오류: {html.escape(str(e)[:100])}")
-
-    elif cmd == "/stock_start_sim":
-        from core.stock.trader import _stock_trading_state, _stock_lock, start_stock_trading
-        with _stock_lock:
-            _enabled = _stock_trading_state["enabled"]
-        if _enabled:
-            reply("이미 주식 시뮬 매매가 실행 중입니다. /stock_stop 으로 중지하세요.")
-        elif arg:
-            raw = arg.strip().replace(",", "").replace("원", "")
-            try:
-                budget = float(raw)
-            except ValueError:
-                reply("⚠️ 금액이 올바르지 않습니다. 예: /stock_start_sim 1000000")
-                return
-            if budget <= 0:
-                reply("⚠️ 예산은 0보다 커야 합니다.")
-                return
-            result = start_stock_trading(budget)
-            reply(result)
-        else:
-            result = start_stock_trading()
-            reply(result)
-
-    elif cmd == "/stock_stop":
-        from core.stock.trader import stop_stock_trading
-        result = stop_stock_trading()
-        reply(result)
-
     else:
         reply(f"알 수 없는 명령: {html.escape(cmd)}\n/help 로 명령어를 확인하세요.")
 
@@ -624,9 +583,443 @@ def _daily_report_worker():
             logging.exception("일일 보고서 생성/전송 오류")
 
 
+# ─────────────────────────────────────────────
+# 주식 봇 전용 Telegram 워커
+# ─────────────────────────────────────────────
+
+_STOCK_HELP_TEXT = (
+    "<b>주식 봇 명령어</b>\n"
+    "/status — 시뮬 상태·잔고·포지션 요약\n"
+    "/perf — 누적 성과 (승률·손익)\n"
+    "/positions — 보유 포지션 상세\n"
+    "/history [n] — 최근 거래 이력 (기본 10, 최대 50)\n"
+    "/params — 현재 파라미터 조회\n"
+    "/market — 장중/장외 상태 확인\n"
+    "/start_sim [금액] — 주식 시뮬 시작 (생략 시 KIS 잔고)\n"
+    "/start_live — 실거래 시작 (미지원)\n"
+    "/stop — 주식 시뮬 중지\n"
+    "/help — 이 도움말"
+)
+
+_STOCK_BOT_COMMANDS = [
+    {"command": "status",     "description": "시뮬 상태·잔고·포지션 요약"},
+    {"command": "perf",       "description": "누적 성과 (승률·손익)"},
+    {"command": "positions",  "description": "보유 포지션 상세"},
+    {"command": "history",    "description": "최근 거래 이력 [n]"},
+    {"command": "params",     "description": "현재 파라미터 조회"},
+    {"command": "market",     "description": "장중/장외 상태 확인"},
+    {"command": "start_sim",  "description": "주식 시뮬 시작 [예산]"},
+    {"command": "start_live", "description": "실거래 시작 (미지원)"},
+    {"command": "stop",       "description": "주식 시뮬 중지"},
+    {"command": "help",       "description": "도움말"},
+]
+
+_STOCK_REPLY_KEYBOARD = {
+    "keyboard": [
+        ["📊 상태", "💰 성과", "📋 포지션", "🕐 장중확인"],
+        ["▶ 시뮬", "⏹ 중지", "📜 이력", "❓ 도움말"],
+    ],
+    "resize_keyboard": True,
+    "persistent": True,
+}
+
+_STOCK_BUTTON_MAP = {
+    "📊 상태":     "/status",
+    "💰 성과":     "/perf",
+    "📋 포지션":   "/positions",
+    "🕐 장중확인": "/market",
+    "▶ 시뮬":     "/start_sim",
+    "⏹ 중지":     "/stop",
+    "📜 이력":     "/history",
+    "❓ 도움말":   "/help",
+}
+
+
+def _send_stock_message(text: str):
+    """주식 봇 토큰으로 직접 sendMessage."""
+    url = _API_BASE.format(token=config.TELEGRAM_STOCK_BOT_TOKEN, method="sendMessage")
+    payload = {
+        "chat_id": config.TELEGRAM_CHAT_ID,
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+    }
+    try:
+        resp = requests.post(url, json=payload, timeout=15)
+        if resp.status_code != 200:
+            logging.warning("Telegram(주식) sendMessage 실패 (%d): %s",
+                            resp.status_code, resp.text[:200])
+    except Exception as e:
+        logging.warning("Telegram(주식) sendMessage 오류: %s", e)
+
+
+def _send_stock_with_keyboard(text: str):
+    """Reply Keyboard 포함 주식 봇 메시지 전송."""
+    url = _API_BASE.format(token=config.TELEGRAM_STOCK_BOT_TOKEN, method="sendMessage")
+    payload = {
+        "chat_id": config.TELEGRAM_CHAT_ID,
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+        "reply_markup": _STOCK_REPLY_KEYBOARD,
+    }
+    try:
+        resp = requests.post(url, json=payload, timeout=15)
+        if resp.status_code != 200:
+            logging.warning("Telegram(주식) sendMessage 실패 (%d): %s",
+                            resp.status_code, resp.text[:200])
+    except Exception as e:
+        logging.warning("Telegram(주식) sendMessage 오류: %s", e)
+
+
+def _register_stock_commands():
+    url = _API_BASE.format(token=config.TELEGRAM_STOCK_BOT_TOKEN, method="setMyCommands")
+    try:
+        resp = requests.post(url, json={"commands": _STOCK_BOT_COMMANDS}, timeout=10)
+        if resp.status_code != 200:
+            logging.warning("Telegram(주식) setMyCommands 실패 (%d): %s",
+                            resp.status_code, resp.text[:200])
+        else:
+            logging.info("Telegram(주식) setMyCommands 등록 완료 (%d개)", len(_STOCK_BOT_COMMANDS))
+    except Exception as e:
+        logging.warning("Telegram(주식) setMyCommands 오류: %s", e)
+
+
+def _get_stock_updates(offset, token: str):
+    """주식 봇 전용 getUpdates."""
+    url = _API_BASE.format(token=token, method="getUpdates")
+    params = {"timeout": _POLL_TIMEOUT, "allowed_updates": ["message"]}
+    if offset is not None:
+        params["offset"] = offset
+    try:
+        resp = requests.post(url, json=params, timeout=_REQ_TIMEOUT)
+    except requests.exceptions.Timeout:
+        return None, offset
+    if resp.status_code == 409:
+        logging.warning("Telegram(주식) getUpdates 409 충돌 — %d초 대기", _CONFLICT_BACKOFF)
+        time.sleep(_CONFLICT_BACKOFF)
+        return None, offset
+    if resp.status_code != 200:
+        logging.warning("Telegram(주식) getUpdates 실패 (%d): %s",
+                        resp.status_code, resp.text[:200])
+        time.sleep(5)
+        return None, offset
+    updates = resp.json().get("result", [])
+    if updates:
+        offset = updates[-1]["update_id"] + 1
+    return updates, offset
+
+
+def _drain_stock_updates(token: str):
+    url = _API_BASE.format(token=token, method="getUpdates")
+    try:
+        resp = requests.post(url, json={"timeout": 0, "offset": -1}, timeout=10)
+        if resp.status_code == 200:
+            updates = resp.json().get("result", [])
+            if updates:
+                return updates[-1]["update_id"] + 1
+    except Exception as e:
+        logging.warning("Telegram(주식) 이전 업데이트 폐기 실패: %s", e)
+    return None
+
+
+def _stock_cmd_perf() -> str:
+    import json as _json
+    import os as _os
+    log_file = _os.path.join("data", "stock_trade_history.jsonl")
+    total, wins, rets = 0, 0, []
+    if _os.path.exists(log_file):
+        with open(log_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = _json.loads(line)
+                except Exception:
+                    continue
+                if rec.get("side") != "sell":
+                    continue
+                r = rec.get("ret_pct")
+                if r is None:
+                    continue
+                total += 1
+                rets.append(r)
+                if r > 0:
+                    wins += 1
+    if total == 0:
+        return "아직 청산 거래 이력이 없습니다."
+    win_rate = wins / total * 100
+    avg_ret  = sum(rets) / len(rets)
+    best     = max(rets)
+    worst    = min(rets)
+    lines = [
+        "<b>주식 시뮬 누적 성과</b>",
+        f"거래: {total}건 · 승률: {win_rate:.0f}%",
+        f"평균수익률: {avg_ret:+.2f}%",
+        f"최고: {best:+.2f}% · 최악: {worst:+.2f}%",
+    ]
+    return "\n".join(lines)
+
+
+def _stock_cmd_positions() -> str:
+    from core.stock.trader import _stock_positions, _stock_lock, _trading_days_held
+    from core.stock.kis_client import KisClient
+    from core import config as _cfg
+    with _stock_lock:
+        positions = dict(_stock_positions)
+    if not positions:
+        return "보유 포지션 없음"
+    client = KisClient(is_sandbox=_cfg.KIS_IS_SANDBOX)
+    lines = [f"<b>보유 포지션 ({len(positions)}종목)</b>"]
+    for code, pos in positions.items():
+        name = html.escape(pos.get("name", code))
+        entry_price = pos.get("entry_price", 0)
+        entry_time  = pos.get("entry_time")
+        try:
+            current = client.get_current_price(code)
+        except Exception:
+            current = entry_price
+        if current and entry_price:
+            fee = _cfg.STOCK_FEE_RATE
+            pct = (current * (1 - fee) - entry_price * (1 + fee)) / (entry_price * (1 + fee)) * 100
+            emoji = "📈" if pct >= 0 else "📉"
+            pct_str = f"{pct:+.2f}%"
+        else:
+            emoji = "•"
+            pct_str = "조회 불가"
+        held = _trading_days_held(entry_time) if entry_time else 0
+        lines.append(
+            f"{emoji} <b>{name}</b>({html.escape(code)}) {pct_str} · {held}일차\n"
+            f"   진입 {entry_price:,.0f}원 / 현재 {current:,.0f}원 / {pos.get('quantity', 0)}주"
+        )
+    return "\n".join(lines)
+
+
+def _stock_cmd_history(n: int) -> str:
+    import json as _json
+    import os as _os
+    log_file = _os.path.join("data", "stock_trade_history.jsonl")
+    if not _os.path.exists(log_file):
+        return "거래 이력 없음"
+    records = []
+    with open(log_file, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                try:
+                    records.append(_json.loads(line))
+                except Exception:
+                    pass
+    if not records:
+        return "거래 이력 없음"
+    recent = records[-n:][::-1]
+    lines = [f"<b>최근 거래 이력 ({len(recent)}건)</b>"]
+    for rec in recent:
+        side = "매수" if rec.get("side") == "buy" else "매도"
+        name = html.escape(rec.get("name", rec.get("code", "?")))
+        ts   = rec.get("ts", "")[:16].replace("T", " ")
+        r    = rec.get("ret_pct")
+        pct_str = f" {r:+.2f}%" if r is not None else ""
+        reason = html.escape(rec.get("reason", ""))
+        lines.append(f"{ts} [{side}] {name}{pct_str} {reason}")
+    return "\n".join(lines)
+
+
+def _stock_cmd_params() -> str:
+    from core import config as _cfg
+    lines = [
+        "<b>주식 봇 파라미터</b>",
+        f"STOCK_BUY_SCORE_THRESHOLD: {_cfg.STOCK_BUY_SCORE_THRESHOLD}",
+        f"STOCK_MAX_LOSS_PERCENT: {_cfg.STOCK_MAX_LOSS_PERCENT}%",
+        f"STOCK_TAKE_PROFIT_PERCENT: {_cfg.STOCK_TAKE_PROFIT_PERCENT}%",
+        f"STOCK_TRAILING_START_PCT: {_cfg.STOCK_TRAILING_START_PCT}%",
+        f"STOCK_TRAILING_STOP_PCT: {_cfg.STOCK_TRAILING_STOP_PCT}%",
+        f"STOCK_MAX_HOLD_DAYS: {_cfg.STOCK_MAX_HOLD_DAYS}일",
+        f"STOCK_MAX_POSITIONS: {_cfg.STOCK_MAX_POSITIONS}",
+        f"STOCK_MAX_PRICE: {_cfg.STOCK_MAX_PRICE:,}원",
+        f"STOCK_BUY_CLOSE_TIME: {_cfg.STOCK_BUY_CLOSE_TIME}",
+    ]
+    return "\n".join(lines)
+
+
+def _stock_cmd_market() -> str:
+    from core.stock.trader import is_market_hours
+    now = datetime.now(_KST)
+    weekday_ko = ["월", "화", "수", "목", "금", "토", "일"]
+    dow = weekday_ko[now.weekday()]
+    time_str = now.strftime("%H:%M")
+    if is_market_hours():
+        close = now.replace(hour=15, minute=30, second=0, microsecond=0)
+        remain = close - now
+        h, m = divmod(int(remain.total_seconds() // 60), 60)
+        return (
+            f"<b>🟢 장중</b> — {now.strftime('%m/%d')}({dow}) {time_str}\n"
+            f"마감까지 {h}시간 {m}분"
+        )
+    else:
+        nxt = now.replace(hour=9, minute=0, second=0, microsecond=0)
+        if now >= nxt:
+            nxt += timedelta(days=1)
+        while nxt.weekday() > 4:
+            nxt += timedelta(days=1)
+        remain = nxt - now
+        h, m = divmod(int(remain.total_seconds() // 60), 60)
+        nxt_dow = weekday_ko[nxt.weekday()]
+        return (
+            f"<b>🔴 장 외</b> — {now.strftime('%m/%d')}({dow}) {time_str}\n"
+            f"다음 개장: {nxt.strftime('%m/%d')}({nxt_dow}) 09:00 "
+            f"({h}시간 {m}분 후)"
+        )
+
+
+def _handle_stock_command(cmd: str, arg: str | None = None):
+    """주식 봇 명령 처리."""
+    reply = _send_stock_message
+
+    if cmd in ("/start", "/help"):
+        _send_stock_with_keyboard(_STOCK_HELP_TEXT)
+
+    elif cmd == "/status":
+        try:
+            from core.stock.trader import build_stock_status_msg
+            reply(build_stock_status_msg())
+        except Exception as e:
+            logging.exception("Telegram(주식) /status 처리 오류")
+            reply(f"⚠️ 상태 조회 오류: {html.escape(str(e)[:100])}")
+
+    elif cmd == "/perf":
+        try:
+            reply(_stock_cmd_perf())
+        except Exception as e:
+            logging.exception("Telegram(주식) /perf 처리 오류")
+            reply(f"⚠️ 성과 조회 오류: {html.escape(str(e)[:100])}")
+
+    elif cmd == "/positions":
+        try:
+            reply(_stock_cmd_positions())
+        except Exception as e:
+            logging.exception("Telegram(주식) /positions 처리 오류")
+            reply(f"⚠️ 포지션 조회 오류: {html.escape(str(e)[:100])}")
+
+    elif cmd == "/history":
+        try:
+            n = 10
+            if arg:
+                try:
+                    n = max(1, min(50, int(arg.strip())))
+                except ValueError:
+                    pass
+            reply(_stock_cmd_history(n))
+        except Exception as e:
+            logging.exception("Telegram(주식) /history 처리 오류")
+            reply(f"⚠️ 이력 조회 오류: {html.escape(str(e)[:100])}")
+
+    elif cmd == "/params":
+        try:
+            reply(_stock_cmd_params())
+        except Exception as e:
+            logging.exception("Telegram(주식) /params 처리 오류")
+            reply(f"⚠️ 파라미터 조회 오류: {html.escape(str(e)[:100])}")
+
+    elif cmd == "/market":
+        try:
+            reply(_stock_cmd_market())
+        except Exception as e:
+            logging.exception("Telegram(주식) /market 처리 오류")
+            reply(f"⚠️ 장중 상태 조회 오류: {html.escape(str(e)[:100])}")
+
+    elif cmd == "/start_sim":
+        from core.stock.trader import _stock_trading_state, _stock_lock, start_stock_trading
+        with _stock_lock:
+            _enabled = _stock_trading_state["enabled"]
+        if _enabled:
+            reply("이미 주식 시뮬 매매가 실행 중입니다. /stop 으로 중지하세요.")
+        elif arg:
+            raw = arg.strip().replace(",", "").replace("원", "")
+            try:
+                budget = float(raw)
+            except ValueError:
+                reply("⚠️ 금액이 올바르지 않습니다. 예: /start_sim 1000000")
+                return
+            if budget <= 0:
+                reply("⚠️ 예산은 0보다 커야 합니다.")
+                return
+            result = start_stock_trading(budget)
+            reply(result)
+        else:
+            result = start_stock_trading()
+            reply(result)
+
+    elif cmd == "/start_live":
+        reply(
+            "🚧 <b>주식 실거래는 아직 지원하지 않습니다.</b>\n"
+            "현재는 시뮬레이션 모드만 사용할 수 있습니다.\n"
+            "/start_sim 으로 시뮬을 시작하세요."
+        )
+
+    elif cmd == "/risk":
+        reply(
+            "🚧 <b>주식 봇 리스크 트래킹은 아직 구현 중입니다.</b>\n"
+            "일일 손실 한도·연속 손절 추적 기능이 추가될 예정입니다."
+        )
+
+    elif cmd == "/stop":
+        from core.stock.trader import stop_stock_trading
+        result = stop_stock_trading()
+        reply(result)
+
+    else:
+        reply(f"알 수 없는 명령: {html.escape(cmd)}\n/help 로 명령어를 확인하세요.")
+
+
+def stock_telegram_worker():
+    """주식 봇 전용 Telegram 명령 폴링 워커."""
+    if not notifier.is_stock_configured():
+        logging.info("TELEGRAM_STOCK_BOT_TOKEN 미설정 — 주식 봇 비활성")
+        return
+
+    token = config.TELEGRAM_STOCK_BOT_TOKEN
+    _register_stock_commands()
+    offset = _drain_stock_updates(token)
+    logging.info("Telegram 주식 명령 봇 시작 (chat_id=%s)", config.TELEGRAM_CHAT_ID)
+    _send_stock_with_keyboard("🏦 주식 봇이 시작됐습니다. /help 로 명령어를 확인하세요.")
+
+    while True:
+        try:
+            updates, offset = _get_stock_updates(offset, token)
+            if not updates:
+                continue
+            for upd in updates:
+                msg = upd.get("message") or {}
+                chat_id = str((msg.get("chat") or {}).get("id", ""))
+                text    = (msg.get("text") or "").strip()
+                if not text:
+                    continue
+                if chat_id != str(config.TELEGRAM_CHAT_ID):
+                    logging.warning("Telegram(주식) 미등록 chat_id(%s)의 명령 무시: %s",
+                                    chat_id, text[:50])
+                    continue
+                # Reply Keyboard 버튼 텍스트 → 명령어로 변환
+                if text in _STOCK_BUTTON_MAP:
+                    text = _STOCK_BUTTON_MAP[text]
+                parts = text.split(maxsplit=1)
+                cmd   = parts[0].split("@")[0].lower()
+                arg   = parts[1].strip() if len(parts) > 1 else None
+                logging.info("Telegram(주식) 명령 수신: %s", cmd)
+                _handle_stock_command(cmd, arg)
+        except requests.exceptions.Timeout:
+            continue
+        except Exception as e:
+            logging.warning("Telegram(주식) 폴링 오류: %s — 10초 후 재시도", e)
+            time.sleep(10)
+
+
 def start_telegram_bot():
     """명령 봇 스레드 기동 (앱 시작 시 1회 호출)"""
     t = threading.Thread(target=telegram_worker, daemon=True, name="telegram-command-bot")
     t.start()
     r = threading.Thread(target=_daily_report_worker, daemon=True, name="telegram-daily-report")
     r.start()
+    s = threading.Thread(target=stock_telegram_worker, daemon=True, name="telegram-stock-bot")
+    s.start()

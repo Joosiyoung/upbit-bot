@@ -66,7 +66,8 @@ logs/
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
 | `UPBIT_ACCESS_KEY` / `SECRET_KEY` | — | 업비트 API 키 |
-| `TELEGRAM_BOT_TOKEN` / `CHAT_ID` | — | Telegram 봇 설정 |
+| `TELEGRAM_BOT_TOKEN` / `CHAT_ID` | — | Telegram 코인 봇 토큰 / 채팅 ID |
+| `TELEGRAM_STOCK_BOT_TOKEN` | `` | Telegram 주식 봇 전용 토큰. 미설정 시 코인 봇으로 fallback |
 | `DASHBOARD_HOST` | `127.0.0.1` | VPS는 Tailscale IP 지정. **0.0.0.0 설정 시 기동 거부** |
 | `DASHBOARD_PORT` | `5000` | 대시보드 포트 |
 | `DASHBOARD_TOKEN` | `` (빈 문자열) | 상태 변경 API(`/api/trading/start`, `/stop`, `/api/refresh`) 인증 토큰. 빈 값이면 경고만 출력하고 통과(로컬 개발 편의). **VPS 운영 시 반드시 설정** |
@@ -145,6 +146,8 @@ logs/
 
 ## Telegram 명령
 
+### 코인 봇 (`TELEGRAM_BOT_TOKEN`)
+
 | 명령 | 동작 |
 |------|------|
 | `/status` | 상태·잔고·포지션 요약 |
@@ -159,10 +162,23 @@ logs/
 | `/liquidate` | 중지 + 전액 청산 (/confirm 필요) |
 | `/help` | 명령어 목록 |
 | (자동) 매일 09:00 KST | 전일 09:00 ~ 당일 08:59 거래 통계 자동 전송 (시뮬/실거래 분리) |
-| `/stock_status` | 주식 시뮬 상태·포지션 요약 |
-| `/stock_start_sim [금액]` | 주식 시뮬 시작 (장 중 한정). 금액 미입력 시 KIS 잔고 자동 조회. 기존 포지션 있으면 잔고·포지션 그대로 재개. |
-| `/stock_stop` | 주식 시뮬 중지 (보유 포지션 유지) |
-| (자동) 매일 09:00 KST | 장 시작 Telegram 알림 (시뮬 상태와 무관하게 항상 발송). 이후 수동으로 `/stock_start_sim` 호출 필요. |
+
+### 주식 봇 (`TELEGRAM_STOCK_BOT_TOKEN`)
+
+| 명령 | 동작 |
+|------|------|
+| `/status` | 주식 시뮬 상태·잔고·포지션 요약 |
+| `/perf` | 누적 성과 (승률·손익) |
+| `/positions` | 보유 포지션 상세 (진입가·현재가·수익률·보유일) |
+| `/history [n]` | 최근 n건 거래 이력 (기본 10건) |
+| `/params` | 현재 적용 파라미터 조회 (STOCK_* 값) |
+| `/market` | 장중/장외 상태 + 다음 개장까지 시간 |
+| `/start_sim [금액]` | 주식 시뮬 시작 (장 중 한정). 금액 미입력 시 KIS 잔고 자동 조회. 기존 포지션 있으면 잔고·포지션 그대로 재개. |
+| `/start_live` | 실거래 시작 (🚧 미지원 — 스텁) |
+| `/risk` | 리스크 상태 (🚧 구현 예정 — 스텁) |
+| `/stop` | 주식 시뮬 중지 (보유 포지션 유지) |
+| `/help` | 명령어 목록 |
+| (자동) 매일 09:00 KST | 장 시작 Telegram 알림. 이후 수동으로 `/start_sim` 호출 필요. |
 | (자동) 매일 15:30 KST | 장 마감 — 주식 시뮬 자동 종료 + 일일 보고서 발송. 보유 포지션은 다음 장 시작 시까지 유지. |
 
 ---

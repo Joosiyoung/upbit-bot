@@ -4,6 +4,7 @@ import logging.handlers
 import os
 import sys
 import threading
+from datetime import datetime
 from flask import Flask, render_template, jsonify, request
 
 from core.data_builder import (
@@ -198,6 +199,127 @@ def api_trading_stop():
 def api_performance():
     """trade_history.jsonl 누적 실현 성과 (시뮬/실거래 분리)"""
     return jsonify(compute_performance())
+
+
+# ─────────────────────────────────────────────
+# 주식 봇 라우트
+# ─────────────────────────────────────────────
+
+@app.route('/api/stock/status')
+def api_stock_status():
+    from core.stock.trader import _stock_trading_state, _stock_positions, _stock_lock
+    with _stock_lock:
+        enabled  = _stock_trading_state["enabled"]
+        sim_krw  = _stock_trading_state["sim_krw"]
+        positions_raw = dict(_stock_positions)
+
+    from core.stock.kis_client import KisClient
+    client = KisClient(is_sandbox=config.KIS_IS_SANDBOX)
+
+    positions_out = {}
+    for code, pos in positions_raw.items():
+        try:
+            current_price = client.get_current_price(code)
+        except Exception:
+            current_price = pos.get("entry_price")
+
+        entry_price = pos.get("entry_price", 0)
+        profit_pct = None
+        if current_price and entry_price > 0:
+            net_sell = current_price * (1 - config.STOCK_FEE_RATE)
+            cost     = entry_price  * (1 + config.STOCK_FEE_RATE)
+            profit_pct = round((net_sell - cost) / cost * 100, 2)
+
+        entry_time = pos.get("entry_time")
+        positions_out[code] = {
+            "name":          pos.get("name", code),
+            "entry_price":   entry_price,
+            "quantity":      pos.get("quantity", 0),
+            "entry_time":    entry_time.isoformat() if hasattr(entry_time, "isoformat") else entry_time,
+            "peak":          pos.get("peak"),
+            "current_price": current_price,
+            "profit_pct":    profit_pct,
+        }
+
+    return jsonify({
+        "enabled":       enabled,
+        "sim_krw":       sim_krw,
+        "positions":     positions_out,
+        "max_positions": config.STOCK_MAX_POSITIONS,
+        "slot_used":     len(positions_out),
+    })
+
+
+@app.route('/api/stock/start', methods=['POST'])
+@_require_auth
+def api_stock_start():
+    from core.stock.trader import start_stock_trading
+    data   = request.get_json(silent=True) or {}
+    budget = data.get("budget", 0.0)
+    try:
+        budget = float(budget) if budget else 0.0
+    except (ValueError, TypeError):
+        budget = 0.0
+    result_msg = start_stock_trading(budget_krw=budget)
+    return jsonify({"ok": True, "msg": result_msg})
+
+
+@app.route('/api/stock/stop', methods=['POST'])
+@_require_auth
+def api_stock_stop():
+    from core.stock.trader import stop_stock_trading
+    result_msg = stop_stock_trading()
+    return jsonify({"ok": True, "msg": result_msg})
+
+
+@app.route('/api/stock/performance')
+def api_stock_performance():
+    import json as _json
+    log_file = os.path.join("data", "stock_trade_history.jsonl")
+    today = datetime.now(config.KST).date()
+
+    total_trades  = 0
+    wins          = 0
+    rets          = []
+    today_sells   = 0
+    today_ret_sum = 0.0
+
+    if os.path.exists(log_file):
+        with open(log_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = _json.loads(line)
+                except Exception:
+                    continue
+                if rec.get("side") != "sell":
+                    continue
+                r = rec.get("ret_pct")
+                if r is None:
+                    continue
+                total_trades += 1
+                rets.append(r)
+                if r > 0:
+                    wins += 1
+                try:
+                    ts = datetime.fromisoformat(rec["ts"])
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=config.KST)
+                    if ts.date() == today:
+                        today_sells   += 1
+                        today_ret_sum += r
+                except Exception:
+                    pass
+
+    return jsonify({
+        "total_trades":  total_trades,
+        "win_rate":      wins / total_trades * 100 if total_trades else 0,
+        "avg_ret":       sum(rets) / len(rets) if rets else 0,
+        "today_sells":   today_sells,
+        "today_ret_sum": today_ret_sum,
+    })
 
 
 @app.route('/api/trading/status')

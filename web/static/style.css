@@ -708,3 +708,29 @@ footer {
   .trading-section, .market-section { padding: 0 12px 16px; }
   .guide-content { grid-template-columns: 1fr; }
 }
+
+/* ── 봇 탭 네비게이션 ── */
+.bot-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px 20px 0;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.bot-tab {
+  padding: 8px 20px;
+  border: none;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--text-sec);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: color 0.15s, border-color 0.15s;
+}
+.bot-tab:hover { color: var(--text-pri); }
+.bot-tab.active {
+  color: var(--blue);
+  border-bottom-color: var(--blue);
+}

@@ -106,9 +106,9 @@ def _stock_market_notifier():
             market_now = is_market_hours()
             if market_now and not market_was_open:
                 market_was_open = True
-                notifier.send(
+                notifier.send_stock(
                     "<b>🔔 장 시작</b> — 평일 09:00 KST\n"
-                    "/stock_start_sim 으로 주식 시뮬을 시작하세요."
+                    "/start_sim 으로 주식 시뮬을 시작하세요."
                 )
             elif not market_now and market_was_open:
                 market_was_open = False
@@ -121,7 +121,7 @@ def start_stock_trading(budget_krw: float = 0.0) -> str:
     if not is_market_hours():
         return (
             "⚠️ 현재 장 시간이 아닙니다 (평일 09:00~15:30).\n"
-            "장 중에 /stock_start_sim 을 다시 입력해주세요."
+            "장 중에 /start_sim 을 다시 입력해주세요."
         )
 
     with _stock_lock:
@@ -140,7 +140,7 @@ def start_stock_trading(budget_krw: float = 0.0) -> str:
             if budget_krw <= 0:
                 return (
                     "KIS 잔고 조회 실패 또는 주문가능현금 0원입니다. "
-                    "금액을 직접 입력하세요.\n예: /stock_start_sim 1000000"
+                    "금액을 직접 입력하세요.\n예: /start_sim 1000000"
                 )
         effective_budget = budget_krw
 
@@ -162,7 +162,7 @@ def start_stock_trading(budget_krw: float = 0.0) -> str:
         msg = f"주식 시뮬 재개 — 기존 포지션 {pos_count}종목, 잔고 {effective_budget:,.0f}원"
     else:
         msg = f"주식 시뮬 시작 — 예산 {effective_budget:,.0f}원"
-    notifier.notify_event("주식 시뮬 매매 시작", msg)
+    notifier.send_stock(f"<b>주식 시뮬 매매 시작</b>\n{html.escape(msg)}")
     return msg
 
 
@@ -170,7 +170,7 @@ def stop_stock_trading() -> str:
     with _stock_lock:
         _stock_trading_state["enabled"] = False
         _save_state()
-    notifier.notify_event("주식 매매 중지")
+    notifier.send_stock("<b>주식 매매 중지</b>")
     return "주식 매매 중지됨"
 
 
@@ -301,7 +301,7 @@ def _stock_worker():
             if not market_now and market_was_open:
                 market_was_open = False
                 report = _build_stock_daily_report()
-                notifier.send(report)
+                notifier.send_stock(report)
                 with _stock_lock:
                     _stock_trading_state["enabled"] = False
                     _save_state()
@@ -397,7 +397,7 @@ def _stock_worker():
 
                     sign = "+" if ret_pct >= 0 else ""
                     emoji = "📈" if ret_pct >= 0 else "📉"
-                    notifier.send(
+                    notifier.send_stock(
                         f"<b>🔴 주식 매도</b> · {html.escape(name)}({html.escape(code)}) <i>(시뮬)</i>\n"
                         f"{emoji} 수익률: <b>{sign}{ret_pct*100:.2f}%</b>\n"
                         f"체결가: {current_price:,.0f}원  수량: {quantity}주\n"
@@ -496,7 +496,7 @@ def _stock_worker():
                         "ts": ts.isoformat(),
                     }
                     _log_trade(record)
-                    notifier.send(
+                    notifier.send_stock(
                         f"<b>🟢 주식 매수</b> · {html.escape(name)}({html.escape(code)}) <i>(시뮬)</i>\n"
                         f"체결가: {current_price:,.0f}원  수량: {quantity}주\n"
                         f"금액: {cost:,.0f}원  점수: {sc:.1f}"
