@@ -57,7 +57,7 @@ Claude 메인은 소스 파일을 직접 Edit/Write 하지 않는다.
 | **tester** | sonnet | 정적 검사 + 스모크 테스트 (Read·Grep·Glob·Bash) | coder 완료 후 자동 |
 | **pm** | sonnet | CLAUDE.md 체크리스트 최종 판정 (Read·Grep·Glob·Bash) | tester 통과 후 자동 |
 | **deployer** | sonnet | git push → VPS restart → 헬스체크 (Bash 전용) | "배포해" 승인 후 자동 |
-| **qa** | opus | 전체 코드베이스 런타임 오류 사전탐지 (스레드 안전성·None 역참조·타임존·HTML 인젝션·엣지케이스). 수정 안 함 — Critical/High 이슈 발견 시 coder로 전달 | **수동** — "qa 실행", "전체 코드 검사", "품질 점검" |
+| **qa** | opus | 전체 코드베이스 런타임 오류 사전탐지 (스레드 안전성·None 역참조·타임존·HTML 인젝션·엣지케이스) + 코드 최적화 점검 (중복 API 호출·불필요한 재연산·비효율 자료구조·파일 I/O hot path). 수정 안 함 — Critical/High 이슈 발견 시 coder로 전달 | **수동** — "qa 실행", "전체 코드 검사", "품질 점검", "최적화 점검" |
 | **bot-enhancer** | opus | 코드베이스 고도화 방안 제안. 수정 안 함 | "고도화 제안", "개선점 분석" |
 | **planner** | opus | 새 기능 기획안 작성(draft/). 수정 안 함 | "기획해줘", "계획 잡아줘" |
 | **security-auditor** | opus | 보안 취약점 점검 보고. 수정 안 함 | "보안 점검", "취약점 분석" |
@@ -229,6 +229,7 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 2026-06-15 | 인프라 | VPS Swap 2GB 추가, Node.js v24.16.0 + Claude Code v2.1.177 설치 (Remote Control 준비) |
 | 2026-06-15 | 인프라 | `.claude/agents/` 15개 git 추적 추가 — VPS Remote Control 에이전트 동기화 |
 | 2026-06-15 | 코인 | fix(trader): 쿨다운 만료 시 `consec_stoploss` 미리셋 버그 수정 (`_buy_block_reason_locked`) |
+| 2026-06-15 | 인프라 | qa 에이전트 코드 최적화 점검 롤 추가 (중복 API 호출·재연산·자료구조·파일 I/O hot path) |
 
 ## VPS 인프라
 
