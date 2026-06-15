@@ -631,8 +631,9 @@ def run_auto_trade():
 
         # 수수료 반영 실수령 기준 수익률 (시뮬·실거래 동일 회계)
         net_sell_price  = current_price * (1 - FEE_RATE)
-        profit_pct      = (net_sell_price - entry_price) / entry_price * 100
-        peak_profit_pct = (peak_price * (1 - FEE_RATE) - entry_price) / entry_price * 100
+        effective_entry = entry_price * (1 + FEE_RATE)
+        profit_pct      = (net_sell_price - effective_entry) / effective_entry * 100
+        peak_profit_pct = (peak_price * (1 - FEE_RATE) - effective_entry) / effective_entry * 100
 
         # 보유 경과 시간 (time-stop용)
         held_hours = None
@@ -917,8 +918,9 @@ def run_auto_trade():
             entry_price = pos["entry_price"]
             if entry_price <= 0:
                 continue
-            net_price  = current_price * (1 - FEE_RATE)
-            profit_pct = (net_price - entry_price) / entry_price * 100
+            net_price       = current_price * (1 - FEE_RATE)
+            effective_entry = entry_price * (1 + FEE_RATE)
+            profit_pct      = (net_price - effective_entry) / effective_entry * 100
 
             # 수익 구간에서만 추가매수 (손실 중 물타기 방지)
             if profit_pct < config.ADD_BUY_MIN_PROFIT or profit_pct > config.ADD_BUY_MAX_PROFIT:
