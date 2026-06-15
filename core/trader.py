@@ -313,9 +313,14 @@ def _buy_block_reason_locked() -> str | None:
         try:
             if datetime.now(_KST) < _as_kst(datetime.fromisoformat(bbu)):
                 return f"연속 손절 보호 쿨다운 (~{bbu[11:16]})"
+            # 쿨다운 소진 → 연속 손절 카운터도 리셋(스트릭 종료).
+            # 그러지 않으면 카운터가 ≥MAX로 남아, 쿨다운 직후 첫 손절이 즉시
+            # 또 다른 쿨다운을 발동시켜 보호가 '120분 반복 멈춤'으로 변질된다.
             _risk_state["buy_block_until"] = None
+            _risk_state["consec_stoploss"] = 0
         except Exception:
             _risk_state["buy_block_until"] = None
+            _risk_state["consec_stoploss"] = 0
     return None
 
 
