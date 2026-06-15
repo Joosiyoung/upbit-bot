@@ -240,16 +240,21 @@ class KisClient:
             logging.getLogger(__name__).warning("KIS 잔고 조회 실패: %s", e)
             return 0.0
 
-    def get_current_price(self, code: str) -> float:
+    def get_current_price(self, code: str) -> float | None:
         url = f"{self._auth.base_url}/uapi/domestic-stock/v1/quotations/inquire-price"
         params = {
             "FID_COND_MRKT_DIV_CODE": "J",
             "FID_INPUT_ISCD":          code,
         }
-        resp = requests.get(url, headers=self._headers("FHKST01010100"),
-                            params=params, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-        self._check_rt(data)
-        output = data.get("output") or {}
-        return float(output.get("stck_prpr", 0) or 0)
+        try:
+            resp = requests.get(url, headers=self._headers("FHKST01010100"),
+                                params=params, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            self._check_rt(data)
+            output = data.get("output") or {}
+            return float(output.get("stck_prpr", 0) or 0)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("KIS 현재가 조회 실패 (%s): %s", code, e)
+            return None

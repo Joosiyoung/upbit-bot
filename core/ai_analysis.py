@@ -9,6 +9,8 @@ import time
 import requests
 from datetime import datetime, timedelta
 
+from core import config
+
 _ai_lock  = threading.Lock()
 _ai_cache = {}
 # 구조:
@@ -38,7 +40,7 @@ def _fetch_fear_greed() -> dict | None:
         return {
             "value":          value,
             "classification": data["value_classification"],
-            "cached_at":      datetime.now(),
+            "cached_at":      datetime.now(config.KST),
         }
     except Exception as e:
         logging.warning("Fear&Greed 조회 실패: %s", e)
@@ -102,11 +104,11 @@ def ai_worker():
                 with _ai_lock:
                     _ai_cache["_upbit_active"] = {
                         "markets":   active,
-                        "cached_at": datetime.now(),
+                        "cached_at": datetime.now(config.KST),
                     }
 
             # ── 2. Fear & Greed (1시간마다, 실패 시 다음 사이클 재시도) ──
-            now = datetime.now()
+            now = datetime.now(config.KST)
             if _last_fg_ts is None or (now - _last_fg_ts) >= timedelta(hours=AI_FG_INTERVAL_HOURS):
                 fg = _fetch_fear_greed()
                 if fg:

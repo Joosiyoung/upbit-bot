@@ -292,7 +292,7 @@ def _stock_worker():
     from core.analysis import score_signal, action_from_score
 
     close_h, close_m = (int(x) for x in config.STOCK_BUY_CLOSE_TIME.split(":"))
-    market_was_open = True  # 장 중에만 시작 가능하므로 True로 초기화
+    market_was_open = is_market_hours()
 
     while _stock_trading_state["enabled"]:
         try:

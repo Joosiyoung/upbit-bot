@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-백테스터 — 라이브 매매 룰을 과거 OHLCV에 적용해 성과를 측정한다.
+백테스터 -- 라이브 매매 룰을 과거 OHLCV에 적용해 성과를 측정한다.
 
 라이브와 동일한 점수 함수(core.analysis.score_signal)·지표(core.indicators)를 재사용하므로
 진입 신호가 실거래 봇과 일치한다. 청산은 trader.py Phase 1 우선순위(익절→손절→트레일링→
@@ -292,14 +292,14 @@ def main():
     ap.add_argument("--intrabar", action="store_true",
                     help="장중 고저 터치로 손절/익절 판정(기본: 종가)")
     ap.add_argument("--no-signal-exit", action="store_true",
-                    help="신호반전(sell-strong) 청산 비활성화 — 추세추종 진입의 휩쏘 청산 영향 측정용")
+                    help="신호반전(sell-strong) 청산 비활성화 -- 추세추종 진입의 휩쏘 청산 영향 측정용")
     ap.add_argument("--regime-gate", action="store_true",
                     help="시장 레짐 필터: BTC 일봉 하락 추세 구간 신규 진입 차단")
     ap.add_argument("--verbose", action="store_true", help="개별 트레이드 출력")
     args = ap.parse_args()
 
     tickers = [t.strip() for t in args.tickers.split(",") if t.strip()]
-    print(f"\n백테스트 시작 — {len(tickers)}종목, {args.days}일, "
+    print(f"\n백테스트 시작 -- {len(tickers)}종목, {args.days}일, "
           f"threshold={args.threshold}, confirm={args.confirm}, "
           f"intrabar={args.intrabar}")
     print(f"청산 룰: 익절 +{config.TAKE_PROFIT_PERCENT}% / 손절 -{config.MAX_LOSS_PERCENT}% / "
@@ -348,13 +348,13 @@ def main():
         bh_avg = sum(bh_rets) / len(bh_rets)
         print(f"[벤치마크] Buy&Hold 평균 종목 수익률 {bh_avg:+.1f}% "
               f"({len([r for r in bh_rets if r > 0])}/{len(bh_rets)} 종목 상승) "
-              f"— 구간 시장 방향성")
+              f"-- 구간 시장 방향성")
     print()
     # 기대값 해석
     ev = agg["avg_ret"]
-    verdict = ("양(+) 기대값 — 진입 신호에 통계적 우위 있음" if ev > 0.05
-               else "기대값 ~0 — 우위 불명확, 파라미터 재검토 권장" if ev > -0.05
-               else "음(-) 기대값 — 현 룰은 수수료 차감 후 손실")
+    verdict = ("양(+) 기대값 -- 진입 신호에 통계적 우위 있음" if ev > 0.05
+               else "기대값 ~0 -- 우위 불명확, 파라미터 재검토 권장" if ev > -0.05
+               else "음(-) 기대값 -- 현 룰은 수수료 차감 후 손실")
     print(f"판정: {verdict}")
 
 
