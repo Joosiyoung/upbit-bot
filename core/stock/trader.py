@@ -56,35 +56,36 @@ def _log_trade(record: dict):
     os.makedirs(os.path.dirname(STOCK_TRADE_LOG_FILE), exist_ok=True)
     with open(STOCK_TRADE_LOG_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
-    if record.get("side") in ("buy", "sell"):
-        try:
-            sc = _sheets_mod.get_client()
-            if sc is not None:
-                ts_val = record.get("ts", "")
-                date_str = ts_val[:10] if ts_val else ""
-                time_str = ts_val[11:19] if len(ts_val) >= 19 else ""
-                amount_krw = record.get("price", 0) * record.get("quantity", 0)
-                row = [
-                    date_str,
-                    time_str,
-                    record.get("side", ""),
-                    record.get("code", ""),
-                    record.get("name", ""),
-                    record.get("reason", ""),
-                    record.get("price", ""),
-                    record.get("quantity", ""),
-                    round(amount_krw),
-                    record.get("ret_pct", ""),
-                    record.get("threshold", config.STOCK_BUY_SCORE_THRESHOLD),
-                    record.get("tp_pct", config.STOCK_TAKE_PROFIT_PERCENT),
-                    record.get("sl_pct", config.STOCK_MAX_LOSS_PERCENT),
-                    record.get("trailing_start_pct", config.STOCK_TRAILING_START_PCT),
-                    record.get("trailing_stop_pct", config.STOCK_TRAILING_STOP_PCT),
-                    record.get("max_hold_days", config.STOCK_MAX_HOLD_DAYS),
-                ]
-                sc.append("주식", row)
-        except Exception as e:
-            logging.warning("Sheets 주식 전송 실패: %s", e)
+    # ── 국내주식 Sheets 로깅 비활성 (미국주식 전용으로 전환) ──────────────
+    # if record.get("side") in ("buy", "sell"):
+    #     try:
+    #         sc = _sheets_mod.get_client()
+    #         if sc is not None:
+    #             ts_val = record.get("ts", "")
+    #             date_str = ts_val[:10] if ts_val else ""
+    #             time_str = ts_val[11:19] if len(ts_val) >= 19 else ""
+    #             amount_krw = record.get("price", 0) * record.get("quantity", 0)
+    #             row = [
+    #                 date_str,
+    #                 time_str,
+    #                 record.get("side", ""),
+    #                 record.get("code", ""),
+    #                 record.get("name", ""),
+    #                 record.get("reason", ""),
+    #                 record.get("price", ""),
+    #                 record.get("quantity", ""),
+    #                 round(amount_krw),
+    #                 record.get("ret_pct", ""),
+    #                 record.get("threshold", config.STOCK_BUY_SCORE_THRESHOLD),
+    #                 record.get("tp_pct", config.STOCK_TAKE_PROFIT_PERCENT),
+    #                 record.get("sl_pct", config.STOCK_MAX_LOSS_PERCENT),
+    #                 record.get("trailing_start_pct", config.STOCK_TRAILING_START_PCT),
+    #                 record.get("trailing_stop_pct", config.STOCK_TRAILING_STOP_PCT),
+    #                 record.get("max_hold_days", config.STOCK_MAX_HOLD_DAYS),
+    #             ]
+    #             sc.append("주식", row)
+    #     except Exception as e:
+    #         logging.warning("Sheets 주식 전송 실패: %s", e)
 
 
 def _save_state():

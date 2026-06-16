@@ -69,7 +69,7 @@ def _log_us_trade(record: dict):
                     record.get("trailing_stop_pct", config.US_TRAILING_STOP_PCT),
                     record.get("max_hold_days", config.US_MAX_HOLD_DAYS),
                 ]
-                sc.append("미국주식", row)
+                sc.append("주식", row)
         except Exception as e:
             _logger.warning("Sheets 미국주식 전송 실패: %s", e)
 
