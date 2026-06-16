@@ -253,6 +253,7 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 2026-06-16 | 인프라 | feat(docs): daily-summarizer 에이전트 신설 — "오늘 작업한 내용 정리해놔" 트리거 시 CLAUDE.md·README.md 자동 업데이트 |
 | 2026-06-16 | 주식 | fix(stock): `build_stock_status_msg` 현재가 None fallback·평단가 수수료 이중반영·astimezone naive 분기·중복 KIS API 호출·락 일관성 수정 6건 |
 | 2026-06-16 | 주식 | universe: KB금융(105560) 제거 (KIS sandbox 상시 500 오류 종목) → 19종목 |
+| 2026-06-16 | 인프라 | Google Sheets 실시간 거래 적재 (`core/sheets_client.py`) — 코인/주식 2개 시트, 네트워크 오류 시 `data/sheets_buffer.jsonl` 버퍼링, sell 레코드에 전략 파라미터 임베드 |
 
 ## VPS 인프라
 

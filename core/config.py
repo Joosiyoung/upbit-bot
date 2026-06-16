@@ -171,3 +171,7 @@ STOCK_MAX_SLOTS_PER_TICKER  = int(os.getenv("STOCK_MAX_SLOTS_PER_TICKER", "2")) 
 STOCK_ENTRY_CHANGE_MAX  = float(os.getenv("STOCK_ENTRY_CHANGE_MAX",  "2.0"))   # 당일 등락률 상한 (%)
 STOCK_ENTRY_CHANGE_MIN  = float(os.getenv("STOCK_ENTRY_CHANGE_MIN",  "-3.0"))  # 당일 등락률 하한 (%)
 STOCK_SIM_BUDGET = int(os.getenv("STOCK_SIM_BUDGET", "1000000"))  # 주식 시뮬 초기 예산 (KRW)
+
+# ─── Google Sheets 연동 ───
+GOOGLE_SHEETS_ID       = os.getenv("GOOGLE_SHEETS_ID", "")
+GOOGLE_SHEETS_KEY_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE", "warm-alliance-279008-58e85ac09da1.json")

@@ -2,6 +2,9 @@
 .env
 .env.*
 
+# Google Service Account 키
+warm-alliance-*.json
+
 # SSH 키 (절대 커밋 금지)
 ssh-key-*.key
 *.key

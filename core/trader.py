@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from core.upbit_client import UpbitClient
 from core import config
 from core import notifier
+from core import sheets_client as _sheets_mod
 
 _KST = config.KST
 
@@ -257,6 +258,30 @@ def _log_trade(entry: dict):
     except Exception as e:
         logging.warning("거래 이력 파일 기록 실패: %s", e)
     notifier.notify_trade(entry)
+    if entry.get("type") in ("buy", "sell"):
+        try:
+            sc = _sheets_mod.get_client()
+            if sc is not None:
+                row = [
+                    entry.get("date", ""),
+                    entry.get("time", ""),
+                    entry.get("type", ""),
+                    entry.get("ticker", ""),
+                    entry.get("reason", ""),
+                    entry.get("price", ""),
+                    entry.get("amount", ""),
+                    entry.get("profit_pct", ""),
+                    entry.get("live", ""),
+                    entry.get("threshold", ""),
+                    entry.get("tp_pct", ""),
+                    entry.get("sl_pct", ""),
+                    entry.get("trailing_start_pct", ""),
+                    entry.get("trailing_stop_pct", ""),
+                    entry.get("max_hold_hours", ""),
+                ]
+                sc.append("코인", row)
+        except Exception as e:
+            logging.warning("Sheets 코인 전송 실패: %s", e)
 
 
 # ─────────────────────────────────────────────
@@ -696,14 +721,20 @@ def run_auto_trade():
         sell_proceeds = sold_qty * current_price * (1 - FEE_RATE)
 
         _log_trade({
-            "time":       now_str,
-            "type":       "sell",
-            "ticker":     ticker,
-            "reason":     sell_reason,
-            "price":      current_price,
-            "amount":     pos["amount_krw"],
-            "profit_pct": round(profit_pct, 2),
-            "live":       live_mode,
+            "time":               now_str,
+            "type":               "sell",
+            "ticker":             ticker,
+            "reason":             sell_reason,
+            "price":              current_price,
+            "amount":             pos["amount_krw"],
+            "profit_pct":         round(profit_pct, 2),
+            "live":               live_mode,
+            "threshold":          config.BUY_SCORE_THRESHOLD,
+            "tp_pct":             config.TAKE_PROFIT_PERCENT,
+            "sl_pct":             config.MAX_LOSS_PERCENT,
+            "trailing_start_pct": config.TRAILING_START_PCT,
+            "trailing_stop_pct":  config.TRAILING_STOP_PCT,
+            "max_hold_hours":     config.MAX_HOLD_HOURS,
         })
         with _trading_lock:
             _trading_state["positions"].pop(ticker, None)
@@ -835,13 +866,14 @@ def run_auto_trade():
                 stored_entry = entry_price
 
             _log_trade({
-                "time":   now_str,
-                "type":   "buy",
-                "ticker": ticker,
-                "reason": buy_reason,
-                "price":  stored_entry,
-                "amount": amount,
-                "live":   live_mode,
+                "time":      now_str,
+                "type":      "buy",
+                "ticker":    ticker,
+                "reason":    buy_reason,
+                "price":     stored_entry,
+                "amount":    amount,
+                "live":      live_mode,
+                "threshold": config.BUY_SCORE_THRESHOLD,
             })
             with _trading_lock:
                 if _trading_state["epoch"] != epoch:
@@ -958,8 +990,14 @@ def run_auto_trade():
                 fill_price2 = current_price
 
             _log_trade({
-                "time": now_str, "type": "buy", "ticker": ticker,
-                "reason": add_reason, "price": fill_price2, "amount": amount2, "live": live_mode,
+                "time":      now_str,
+                "type":      "buy",
+                "ticker":    ticker,
+                "reason":    add_reason,
+                "price":     fill_price2,
+                "amount":    amount2,
+                "live":      live_mode,
+                "threshold": config.BUY_SCORE_THRESHOLD,
             })
             with _trading_lock:
                 if _trading_state["epoch"] != epoch:

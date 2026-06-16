@@ -74,6 +74,8 @@ logs/
 | `DASHBOARD_PORT` | `5000` | 대시보드 포트 |
 | `DASHBOARD_TOKEN` | `` (빈 문자열) | 상태 변경 API(`/api/trading/start`, `/stop`, `/api/refresh`) 인증 토큰. 빈 값이면 경고만 출력하고 통과(로컬 개발 편의). **VPS 운영 시 반드시 설정** |
 | `TRADE_AMOUNT_KRW` | `100000` | 대시보드 표시용 참고값. 실제 매수금액은 실시간 KRW 잔고 ÷ 빈 슬롯 수로 자동 계산 |
+| `GOOGLE_SHEETS_ID` | `` | Google Sheets 스프레드시트 ID. 미설정 시 Sheets 적재 비활성화 |
+| `GOOGLE_SHEETS_KEY_FILE` | `warm-alliance-*.json` | Service Account JSON 키 파일 경로. **git 미추적 — VPS에 별도 SCP 전송 필요** |
 | `MAX_POSITIONS` | `5` | 최대 동시 보유 종목 수 |
 | `EQUAL_WEIGHT_SIZING` | `True` | True: 종목당 금액을 (총자산 ÷ MAX_POSITIONS)로 상한 — 마지막 슬롯에 잔고 전액 몰림 방지 |
 | `MAX_LOSS_PERCENT` | `3.0` | 손절 (%) |
