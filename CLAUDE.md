@@ -61,6 +61,7 @@ Claude 메인은 소스 파일을 직접 Edit/Write 하지 않는다.
 | **bot-enhancer** | opus | 코드베이스 고도화 방안 제안. 수정 안 함 | "고도화 제안", "개선점 분석" |
 | **planner** | opus | 새 기능 기획안 작성(draft/). 수정 안 함 | "기획해줘", "계획 잡아줘" |
 | **security-auditor** | opus | 보안 취약점 점검 보고. 수정 안 함 | "보안 점검", "취약점 분석" |
+| **daily-summarizer** | sonnet | 당일 커밋 파악 → CLAUDE.md 이력 추가 + 두 파일 최적화 (Read·Bash·Edit·Write) | "오늘 작업한 내용 정리해놔" |
 | **incident-responder** | opus | 장애 원인 분석 + 핫픽스 지시. 수정 안 함 | **수동** — "봇이 죽었어", "장애 분석" |
 | **log-analyzer** | opus | 코인 거래 로그(`data/trade_history.jsonl`) 분석. 버그 시 수정 | **수동** — "log-analyzer 실행" |
 | **param-optimizer** | opus | 코인 백테스트(`backtest.py`) 파라미터 스윕 → 기대값 양수 조합 적용 | **수동** — "param-optimizer 실행" |
@@ -69,7 +70,7 @@ Claude 메인은 소스 파일을 직접 Edit/Write 하지 않는다.
 | **stock-param-optimizer** | opus | 주식 백테스트(`stock_backtest.py`) 파라미터 스윕 → 적용 | **수동** — "stock-param-optimizer 실행" |
 | **stock-strategy-researcher** | opus | 주식 전략 연구(KOSPI 레짐·섹터·시간대) → draft/ 초안. 수정 안 함 | **수동** — "stock-strategy-researcher 실행" |
 
-> **수동 전용**: qa·log-analyzer·param-optimizer·strategy-researcher·incident-responder·stock-log-analyzer·stock-param-optimizer·stock-strategy-researcher — 사용자가 이름을 명시할 때만 실행. **자동 위임 금지.**
+> **수동 전용**: qa·log-analyzer·param-optimizer·strategy-researcher·incident-responder·stock-log-analyzer·stock-param-optimizer·stock-strategy-researcher·daily-summarizer — 사용자가 이름을 명시하거나 트리거 문구를 말할 때만 실행. **자동 위임 금지.**
 
 ### 수동 에이전트 운영 루틴
 
@@ -179,6 +180,8 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | `STOCK_MAX_HOLD_DAYS` | 5 | time-stop (영업일 기준) |
 | `STOCK_MAX_PRICE` | 200,000 | 1주 가격 상한 (투자금÷슬롯 기준) |
 | `STOCK_BUY_CLOSE_TIME` | 15:20 | 신규 매수 마감 시각 |
+| `STOCK_ENTRY_CHANGE_MAX` | +2.0% | 당일 등락률 상한 — 갭업 추격 차단 |
+| `STOCK_ENTRY_CHANGE_MIN` | -3.0% | 당일 등락률 하한 — 폭락 종목 진입 차단 |
 
 ## 매수 차단 게이트
 
@@ -194,6 +197,8 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 2. 매수 마감 시각(`STOCK_BUY_CLOSE_TIME`) 초과
 3. 종가 > `STOCK_MAX_PRICE`
 4. 진입 점수 × 2.5 < `STOCK_BUY_SCORE_THRESHOLD`
+5. 당일 매도 이력 — `_stock_sold_today`에 기록된 종목 당일 재진입 차단
+6. 당일 등락률 범위 초과 — `(현재가/전일종가 - 1) × 100` < `STOCK_ENTRY_CHANGE_MIN` 또는 > `STOCK_ENTRY_CHANGE_MAX`
 
 ## 주요 Gotchas
 
@@ -207,6 +212,8 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 - **주식 시뮬 시작** — 장 외 시간 호출 시 즉시 거부. 재시작 시 기존 포지션·잔고 유지(`_stock_positions.clear()` 없음).
 - **시뮬 모드 목적** — 레짐 필터·F&G 바이패스는 데이터 축적 목적. 진입 점수 임계치(12)는 유지.
 - **VPS GitHub push 403** — VPS `credential.helper=store` 토큰 만료로 VPS에서 push 불가. 코드 수정은 반드시 로컬 push → VPS pull 순서. VPS에서 직접 push 시도 금지.
+- **`_stock_sold_today` 비지속** — 서비스 재시작 시 초기화됨. 당일 매도 이력은 메모리에만 보관. 의도적 설계(재시작 후 당일 재진입은 허용).
+- **`_daily_signal_cache` 단일 워커 전용** — `_stock_worker` 외 다른 스레드에서 접근 금지. 락 없이 설계됨.
 - **`settings.json` VPS 미동기화 (의도적)** — Windows 전용 경로·명령(taskkill, powershell, cmd.exe 등) 포함. `.claude/*` gitignore로 제외됨. VPS는 Remote Control 최초 실행 시 자체 Linux 설정 자동 생성.
 
 ## 최근 변경 이력
@@ -230,6 +237,10 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 2026-06-15 | 인프라 | `.claude/agents/` 15개 git 추적 추가 — VPS Remote Control 에이전트 동기화 |
 | 2026-06-15 | 코인 | fix(trader): 쿨다운 만료 시 `consec_stoploss` 미리셋 버그 수정 (`_buy_block_reason_locked`) |
 | 2026-06-15 | 인프라 | qa 에이전트 코드 최적화 점검 롤 추가 (중복 API 호출·재연산·자료구조·파일 I/O hot path) |
+| 2026-06-16 | 주식 | 당일 재진입 쿨다운: `_stock_sold_today` — 익절/손절 후 당일 동일 종목 재진입 차단 |
+| 2026-06-16 | 주식 | 일봉 신호 캐시: `_get_daily_signal()` — KIS TR 99% 절감, 자정 자동 무효화 |
+| 2026-06-16 | 주식 | 당일 등락률 필터: `STOCK_ENTRY_CHANGE_MIN/MAX` — 갭업 추격·폭락 종목 진입 차단 |
+| 2026-06-16 | 주식 | 5분봉 타이밍 필터 보류 — 표본 50건 이상 축적 후 백테스트 비교 기반으로 재판단 예정 |
 
 ## VPS 인프라
 
