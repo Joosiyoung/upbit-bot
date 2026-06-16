@@ -164,3 +164,7 @@ STOCK_FEE_RATE             = float(os.getenv("STOCK_FEE_RATE",            "0.003
 STOCK_BUY_CLOSE_TIME       = os.getenv("STOCK_BUY_CLOSE_TIME",           "15:20")
 STOCK_REGIME_FILTER        = os.getenv("STOCK_REGIME_FILTER", "True").lower() != "false"
 STOCK_MAX_PRICE             = int(os.getenv("STOCK_MAX_PRICE", "200000"))
+STOCK_ADD_BUY_ENABLED       = os.getenv("STOCK_ADD_BUY_ENABLED", "True").lower() == "true"
+STOCK_ADD_BUY_MIN_PROFIT    = float(os.getenv("STOCK_ADD_BUY_MIN_PROFIT", "0.0"))   # 손실 중 물타기 방지
+STOCK_ADD_BUY_MAX_PROFIT    = float(os.getenv("STOCK_ADD_BUY_MAX_PROFIT", "2.0"))   # 추격매수 방지 (주식은 2%)
+STOCK_MAX_SLOTS_PER_TICKER  = int(os.getenv("STOCK_MAX_SLOTS_PER_TICKER", "2"))      # 종목당 최대 슬롯

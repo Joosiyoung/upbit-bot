@@ -407,7 +407,8 @@ def _stock_worker():
 
             # ── 진입 스캔 ──
             now = datetime.now(_KST)
-            buy_cutoff = now.hour * 60 + now.minute > close_h * 60 + close_m
+            is_sim = _stock_trading_state.get("mode", "sim") == "sim"
+            buy_cutoff = (not is_sim) and (now.hour * 60 + now.minute > close_h * 60 + close_m)
 
             with _stock_lock:
                 cur_positions = len(_stock_positions)
@@ -504,6 +505,104 @@ def _stock_worker():
                         f"금액: {cost:,.0f}원  점수: {sc:.1f}"
                     )
                     logging.info("주식 매수: %s %s score=%.1f", code, name, sc)
+
+            # ─── 추가매수 Phase ───
+            if config.STOCK_ADD_BUY_ENABLED and not buy_cutoff:
+                with _stock_lock:
+                    cur_positions = len(_stock_positions)
+                    sim_krw = _stock_trading_state["sim_krw"]
+                    positions_snapshot = dict(_stock_positions)
+
+                empty_slots = config.STOCK_MAX_POSITIONS - cur_positions
+                if empty_slots > 0 and sim_krw > 0:
+                    slot_budget = sim_krw / empty_slots
+                    for code, pos in list(positions_snapshot.items()):
+                        if empty_slots <= 0:
+                            break
+                        # 종목당 슬롯 상한 확인
+                        if pos.get("slot_count", 1) >= config.STOCK_MAX_SLOTS_PER_TICKER:
+                            continue
+                        # 마지막 매수 이후 1 영업일(1일) 이상 경과 확인
+                        last_ts = pos.get("last_add_ts") or pos.get("entry_ts")
+                        if not last_ts:
+                            entry_time_val = pos.get("entry_time")
+                            if entry_time_val is None:
+                                continue
+                            last_ts = entry_time_val.isoformat() if hasattr(entry_time_val, "isoformat") else str(entry_time_val)
+                        try:
+                            last_dt = datetime.fromisoformat(last_ts).astimezone(_KST)
+                        except Exception:
+                            continue
+                        if (now - last_dt) < timedelta(days=1):
+                            continue
+                        # 현재가 조회
+                        try:
+                            current_price = client.get_current_price(code)
+                        except Exception:
+                            continue
+                        if not current_price:
+                            continue
+                        # 수익률 계산
+                        entry_price = pos["entry_price"]
+                        if entry_price <= 0:
+                            continue
+                        profit_pct = (current_price * (1 - FEE_RATE) - entry_price * (1 + FEE_RATE)) / (entry_price * (1 + FEE_RATE)) * 100
+                        # 수익 구간 확인 (손실 중 물타기 방지)
+                        if profit_pct < config.STOCK_ADD_BUY_MIN_PROFIT or profit_pct > config.STOCK_ADD_BUY_MAX_PROFIT:
+                            continue
+                        # 진입 점수 확인
+                        try:
+                            daily = client.get_ohlcv(code, "day", 120)
+                            daily = add_all_indicators(daily)
+                            if daily.empty or len(daily) < 2:
+                                continue
+                            ind = get_latest_indicators(daily, completed=True)
+                        except Exception:
+                            continue
+                        sc = score_signal(ind) * 2.5
+                        if sc < config.STOCK_BUY_SCORE_THRESHOLD:
+                            continue
+                        # 매수 실행
+                        quantity = math.floor(slot_budget / current_price)
+                        if quantity <= 0:
+                            continue
+                        cost = quantity * current_price * (1 + FEE_RATE)
+                        with _stock_lock:
+                            if _stock_trading_state["sim_krw"] < cost:
+                                continue
+                            if code not in _stock_positions:
+                                continue
+                            p = _stock_positions[code]
+                            name_add = p.get("name", code)
+                            new_qty = p["quantity"] + quantity
+                            new_amt = p["amount_krw"] + cost if "amount_krw" in p else p["entry_price"] * p["quantity"] * (1 + FEE_RATE) + cost
+                            p["entry_price"] = new_amt / new_qty
+                            p["quantity"] = new_qty
+                            p["amount_krw"] = new_amt
+                            p["slot_count"] = p.get("slot_count", 1) + 1
+                            p["last_add_ts"] = now.isoformat()
+                            p["peak"] = max(p.get("peak", 0), current_price)
+                            _stock_trading_state["sim_krw"] = max(0.0, _stock_trading_state["sim_krw"] - cost)
+                            empty_slots -= 1
+                            _save_state()
+                        add_reason = f"추가매수: 강한 매수 (점수 {sc:.1f}, 수익 {profit_pct:+.1f}%)"
+                        _log_trade({
+                            "code":     code,
+                            "name":     name_add,
+                            "mode":     "sim",
+                            "side":     "buy",
+                            "price":    current_price,
+                            "quantity": quantity,
+                            "ret_pct":  None,
+                            "reason":   add_reason,
+                            "ts":       now.isoformat(),
+                        })
+                        notifier.send_stock(
+                            f"<b>🟢 주식 추가매수</b> · {html.escape(name_add)}({html.escape(code)}) <i>(시뮬)</i>\n"
+                            f"추가 {quantity}주 · {current_price:,.0f}원\n"
+                            f"사유: {html.escape(add_reason)}"
+                        )
+                        logging.info("주식 추가매수: %s %s %.2f%%", code, add_reason, profit_pct)
 
         except Exception:
             logging.exception("주식 워커 오류")
