@@ -51,7 +51,7 @@ core/
     trading_control.py   # 주식 시작/중지/상태 (Flask ↔ Telegram 공용)
     kis_auth.py          # KIS OAuth2 토큰 관리
     kis_client.py        # KIS API 래퍼 (OHLCV·현재가)
-    universe.py          # 매매 대상 종목 풀 (KOSPI 대형주)
+    universe.py          # 매매 대상 종목 풀 (KOSPI 대형주 19종목)
 scripts/
   backtest.py            # 백테스터 (라이브 룰 동일 재현)
   stock_backtest.py      # 주식 백테스터 (KIS OHLCV → score_signal)
@@ -109,7 +109,7 @@ logs/
 | `STOCK_MAX_HOLD_DAYS` | `5` | 주식 최대 보유 일수 (영업일 기준) |
 | `STOCK_DAILY_LOSS_LIMIT_PCT` | `5.0` | 주식 일일 손실 한도 초과 시 당일 매수 차단 |
 | `STOCK_FEE_RATE` | `0.003` | 주식 시뮬 수수료율 (매수+매도+세금 합산) |
-| `STOCK_MAX_PRICE` | `200000` | 1주 가격이 이 금액 초과 시 진입 스킵. 투자금/MAX_POSITIONS를 기준으로 설정 |
+| `STOCK_MAX_PRICE` | `200000` | 레거시 고정값. 실제 진입 필터는 `sim_krw / empty_slots`(슬롯당 예산) 기준으로 동적 계산 |
 | `STOCK_BUY_CLOSE_TIME` | `15:20` | 신규 매수 마감 시각 (잔여 시간 진입 방지). 시뮬 모드에서는 비활성화 |
 | `STOCK_REGIME_FILTER` | `True` | KOSPI EMA 하락 시 전 종목 매수 차단 |
 | `STOCK_ENTRY_CHANGE_MAX` | `2.0` | 당일 등락률 상한 (%). 이 값 초과 시 진입 차단 (갭업 추격 방지) |

@@ -124,7 +124,7 @@ core/
     trading_control.py  # 주식 시작/중지/상태 (Flask ↔ Telegram 공용)
     kis_auth.py         # KIS OAuth2 토큰 관리
     kis_client.py       # KIS API 래퍼 (OHLCV·현재가·잔고조회)
-    universe.py         # 매매 대상 종목 풀 (KOSPI 대형주 20종목, 20만원 이하)
+    universe.py         # 매매 대상 종목 풀 (KOSPI 대형주 19종목, KB금융 제외)
 scripts/
   backtest.py           # 코인 백테스터
   stock_backtest.py     # 주식 백테스터 (KIS OHLCV → score_signal × 2.5)
@@ -219,6 +219,8 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 - **`_stock_sold_today` 비지속** — 서비스 재시작 시 초기화됨. 당일 매도 이력은 메모리에만 보관. 의도적 설계(재시작 후 당일 재진입은 허용).
 - **`_daily_signal_cache` 단일 워커 전용** — `_stock_worker` 외 다른 스레드에서 접근 금지. 락 없이 설계됨.
 - **`settings.json` VPS 미동기화 (의도적)** — Windows 전용 경로·명령(taskkill, powershell, cmd.exe 등) 포함. `.claude/*` gitignore로 제외됨. VPS는 Remote Control 최초 실행 시 자체 Linux 설정 자동 생성.
+- **`build_stock_status_msg` 현재가 조회** — `get_current_price()`는 예외를 던지지 않고 None 반환. `try/except` 사용 금지. `if not price: price = entry_price` 패턴 사용. None 반환 시 진입가를 fallback으로 표시하고 `(진입가)` suffix 추가.
+- **KIS sandbox 상시 500 오류 종목** — `universe.py`에서 KB금융(105560) 제거됨. KIS sandbox 환경에서 해당 종목 조회 시 항상 500 에러 반환 → 유니버스 19종목으로 고정.
 
 ## 최근 변경 이력
 
@@ -249,6 +251,8 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 2026-06-16 | 주식 | 당일 등락률 필터: `STOCK_ENTRY_CHANGE_MIN/MAX` — 갭업 추격·폭락 종목 진입 차단 |
 | 2026-06-16 | 주식 | 5분봉 타이밍 필터 보류 — 표본 50건 이상 축적 후 백테스트 비교 기반으로 재판단 예정 |
 | 2026-06-16 | 인프라 | feat(docs): daily-summarizer 에이전트 신설 — "오늘 작업한 내용 정리해놔" 트리거 시 CLAUDE.md·README.md 자동 업데이트 |
+| 2026-06-16 | 주식 | fix(stock): `build_stock_status_msg` 현재가 None fallback·평단가 수수료 이중반영·astimezone naive 분기·중복 KIS API 호출·락 일관성 수정 6건 |
+| 2026-06-16 | 주식 | universe: KB금융(105560) 제거 (KIS sandbox 상시 500 오류 종목) → 19종목 |
 
 ## VPS 인프라
 
