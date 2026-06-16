@@ -357,6 +357,48 @@ class KisClient:
                 return last_rate
             return config.US_DEFAULT_EXCHANGE_RATE
 
+    def get_us_top_volume_stocks(self, excd: str, limit: int = 50, min_vol: str = "4", min_prc: str = "5") -> list[tuple[str, str, str]]:
+        """해외주식 거래량순위 상위 종목 조회.
+
+        excd: "NAS" | "NYS"
+        min_vol: "0"=전체, "4"=10만주이상 (기본)
+        min_prc: 최소 가격 필터 (달러, 기본 5달러)
+        반환: [(symbol, name, excd), ...] — limit개 이내
+        실패 시 빈 리스트 반환.
+        """
+        import logging
+        url = f"{self._auth.base_url}/uapi/overseas-stock/v1/ranking/trade-vol"
+        params = {
+            "EXCD":     excd,
+            "NDAY":     "0",      # 당일 기준
+            "VOL_RANG": min_vol,
+            "AUTH":     "",
+            "KEYB":     "",
+            "PRC1":     min_prc,
+            "PRC2":     "",
+        }
+        try:
+            resp = requests.get(url, headers=self._headers("HHDFS76310010"),
+                                params=params, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("rt_cd") != "0":
+                logging.getLogger(__name__).warning(
+                    "KIS 해외주식 거래량순위 오류 (%s): %s", excd, data.get("msg1", "")
+                )
+                return []
+            rows = data.get("output2") or []
+            result = []
+            for row in rows[:limit]:
+                symb = row.get("symb", "").strip()
+                name = row.get("name", "").strip()
+                if symb:
+                    result.append((symb, name or symb, excd))
+            return result
+        except Exception as e:
+            logging.getLogger(__name__).warning("KIS 해외주식 거래량순위 조회 실패 (%s): %s", excd, e)
+            return []
+
     def get_top_volume_stocks(self, limit: int = 60) -> list[tuple[str, str]]:
         """KOSPI 거래량 순위 상위 종목 조회.
 

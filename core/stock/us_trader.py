@@ -246,7 +246,7 @@ def _us_worker():
                 time.sleep(60)
                 continue
 
-            universe = get_us_universe()
+            universe = get_us_universe(client)
             for symbol, name, excd in universe:
                 with _us_lock:
                     if not _us_running:
