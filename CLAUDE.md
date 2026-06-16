@@ -215,7 +215,7 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 - **`.gitignore` 수정** — PowerShell `echo >>` 금지 (UTF-16 인코딩). Write 도구 사용.
 - **주식 시뮬 시작** — 장 외 시간 호출 시 즉시 거부. 재시작 시 기존 포지션·잔고 유지(`_stock_positions.clear()` 없음).
 - **시뮬 모드 목적** — 레짐 필터·F&G 바이패스는 데이터 축적 목적. 진입 점수 임계치(12)는 유지.
-- **VPS GitHub push 403** — VPS `credential.helper=store` 토큰 만료로 VPS에서 push 불가. 코드 수정은 반드시 로컬 push → VPS pull 순서. VPS에서 직접 push 시도 금지.
+- **VPS git push** — SSH 키 인증(`~/.ssh/id_ed25519`)으로 해결됨(2026-06-16). `git push origin main` VPS에서 직접 가능.
 - **`_stock_sold_today` 비지속** — 서비스 재시작 시 초기화됨. 당일 매도 이력은 메모리에만 보관. 의도적 설계(재시작 후 당일 재진입은 허용).
 - **`_daily_signal_cache` 단일 워커 전용** — `_stock_worker` 외 다른 스레드에서 접근 금지. 락 없이 설계됨.
 - **`settings.json` VPS 미동기화 (의도적)** — Windows 전용 경로·명령(taskkill, powershell, cmd.exe 등) 포함. `.claude/*` gitignore로 제외됨. VPS는 Remote Control 최초 실행 시 자체 Linux 설정 자동 생성.
