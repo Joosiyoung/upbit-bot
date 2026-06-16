@@ -1,6 +1,6 @@
 # Upbit 자동매매 봇
 
-Flask + pyupbit 기반 코인 자동매매 + KIS API 기반 국내 주식 시뮬 봇. 대시보드(웹), Telegram 원격 제어, Oracle Cloud VPS 24시간 운영.
+Flask + pyupbit 기반 코인 자동매매 + KIS API 기반 국내/미국 주식 시뮬 봇. 대시보드(웹), Telegram 원격 제어, Oracle Cloud VPS 24시간 운영.
 
 ## 실행 명령어
 
@@ -119,21 +119,25 @@ core/
   notifier.py           # Telegram 알림 발송
   upbit_client.py       # pyupbit 래퍼
   ai_analysis.py        # Fear & Greed 조회·캐시 워커
-  sheets_client.py      # Google Sheets 실시간 거래 적재 (코인·주식 공통, 오프라인 버퍼링)
+  sheets_client.py      # Google Sheets 실시간 거래 적재 (코인·미국주식, 오프라인 버퍼링)
   stock/
-    trader.py           # 주식 시뮬 매매 로직 + _stock_market_notifier(장 시작 알림 데몬)
-    trading_control.py  # 주식 시작/중지/상태 (Flask ↔ Telegram 공용)
+    trader.py           # 국내 주식 시뮬 매매 로직 + _stock_market_notifier(장 시작 알림 데몬)
+    trading_control.py  # 국내 주식 시작/중지/상태 (Flask ↔ Telegram 공용)
+    us_trader.py        # 미국주식 시뮬 매매 로직 (KRW 예산·환율·소수점 거래)
+    us_universe.py      # 미국주식 유니버스 (NASDAQ/NYSE 주요 종목)
     kis_auth.py         # KIS OAuth2 토큰 관리
-    kis_client.py       # KIS API 래퍼 (OHLCV·현재가·잔고조회)
-    universe.py         # 매매 대상 종목 풀 (KOSPI 대형주 19종목, KB금융 제외)
+    kis_client.py       # KIS API 래퍼 (국내 OHLCV·현재가 + 해외 OHLCV·현재가·소수점 주문 + 환율 조회)
+    universe.py         # 국내 매매 대상 종목 풀 (KOSPI 대형주 19종목, KB금융 제외)
 scripts/
   backtest.py           # 코인 백테스터
   stock_backtest.py     # 주식 백테스터 (KIS OHLCV → score_signal × 2.5)
 data/
-  trade_history.jsonl       # 코인 거래 이력 (365일 보존)
-  stock_trade_history.jsonl # 주식 시뮬 거래 이력
-  stock_state.json          # 주식 시뮬 상태 (포지션·잔고, 재시작 복원)
-  sheets_buffer.jsonl       # Google Sheets 오프라인 버퍼 (네트워크 오류 시 임시 보관)
+  trade_history.jsonl         # 코인 거래 이력 (365일 보존)
+  stock_trade_history.jsonl   # 국내 주식 시뮬 거래 이력
+  stock_state.json            # 국내 주식 시뮬 상태 (포지션·잔고, 재시작 복원)
+  us_stock_state.json         # 미국주식 시뮬 상태 (포지션·달러 잔고, 재시작 복원)
+  us_stock_trade_history.jsonl # 미국주식 시뮬 거래 이력
+  sheets_buffer.jsonl         # Google Sheets 오프라인 버퍼 (네트워크 오류 시 임시 보관)
 logs/
   bot.log               # 운영 로그 (35일 보존, 자정 회전)
 ```
@@ -189,6 +193,24 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | `STOCK_ADD_BUY_MAX_PROFIT` | 2.0% | 추가매수 허용 최대 수익률 — 추격매수 방지 |
 | `STOCK_MAX_SLOTS_PER_TICKER` | 2 | 종목당 최대 슬롯 수 (추가매수 상한) |
 
+### 미국주식 (config.py US_*)
+
+| 파라미터 | 기본값 | 설명 |
+|---------|--------|------|
+| `US_SIM_BUDGET` | 1,000,000 | 시뮬 초기 예산 (KRW 기준, 매수 시 환율로 USD 환산) |
+| `US_MAX_POSITIONS` | 5 | 최대 동시 보유 종목 수 |
+| `US_BUY_SCORE_THRESHOLD` | 12 | 진입 점수 임계치 |
+| `US_MAX_LOSS_PERCENT` | 3.0% | 손절 |
+| `US_TAKE_PROFIT_PERCENT` | 5.0% | 익절 |
+| `US_TRAILING_START_PCT` | 3.0% | 트레일링 스탑 활성화 수익률 |
+| `US_TRAILING_STOP_PCT` | 1.5% | 고점 대비 하락 한도 |
+| `US_MAX_HOLD_DAYS` | 5 | time-stop (일수) |
+| `US_FEE_RATE` | 0.0125 | 편도 수수료율 (KIS 환전 스프레드 1% + 매매 수수료 0.25%) |
+| `US_DEFAULT_EXCHANGE_RATE` | 1380.0 | USD/KRW 환율 fallback (환율 조회 완전 실패 시에만 사용) |
+| `US_ENTRY_CHANGE_MIN` | -3.0% | 당일 등락률 하한 — 폭락 종목 진입 차단 |
+| `US_ENTRY_CHANGE_MAX` | +2.0% | 당일 등락률 상한 — 갭업 추격 차단 |
+| `US_IS_LIVE` | False | True=실거래 주문. 기본값 False (시뮬 전용) |
+
 ## 매수 차단 게이트
 
 **코인** (순서)
@@ -198,13 +220,19 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 4. 시장 캐시 노후 (>180초)
 5. 진입 점수 < BUY_SCORE_THRESHOLD
 
-**주식**
+**국내주식**
 1. 장 외 시간 — `is_market_hours()` False 시 워커 비활성
-2. 매수 마감 시각(`STOCK_BUY_CLOSE_TIME`) 초과
-3. 종가 > `STOCK_MAX_PRICE`
+2. 매수 마감 시각(`STOCK_BUY_CLOSE_TIME`) 초과 — 시뮬 모드 비활성
+3. 슬롯당 예산(`sim_krw / empty_slots`) 대비 종목 가격 초과
 4. 진입 점수 × 2.5 < `STOCK_BUY_SCORE_THRESHOLD`
 5. 당일 매도 이력 — `_stock_sold_today`에 기록된 종목 당일 재진입 차단
 6. 당일 등락률 범위 초과 — `(현재가/전일종가 - 1) × 100` < `STOCK_ENTRY_CHANGE_MIN` 또는 > `STOCK_ENTRY_CHANGE_MAX`
+
+**미국주식**
+1. 장 외 시간 — KST 22:30~05:00 범위 외 또는 주말이면 워커 비활성
+2. 당일 등락률 범위 초과 — `US_ENTRY_CHANGE_MIN`(-3%) ~ `US_ENTRY_CHANGE_MAX`(+2%) 벗어난 종목 차단
+3. 당일 매도 이력 — `_us_sold_today`에 기록된 종목 당일 재진입 차단
+4. 진입 점수 < `US_BUY_SCORE_THRESHOLD`
 
 ## 주요 Gotchas
 
@@ -223,6 +251,10 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 - **`settings.json` VPS 미동기화 (의도적)** — Windows 전용 경로·명령(taskkill, powershell, cmd.exe 등) 포함. `.claude/*` gitignore로 제외됨. VPS는 Remote Control 최초 실행 시 자체 Linux 설정 자동 생성.
 - **`build_stock_status_msg` 현재가 조회** — `get_current_price()`는 예외를 던지지 않고 None 반환. `try/except` 사용 금지. `if not price: price = entry_price` 패턴 사용. None 반환 시 진입가를 fallback으로 표시하고 `(진입가)` suffix 추가.
 - **KIS sandbox 상시 500 오류 종목** — `universe.py`에서 KB금융(105560) 제거됨. KIS sandbox 환경에서 해당 종목 조회 시 항상 500 에러 반환 → 유니버스 19종목으로 고정.
+- **`US_FEE_RATE = 0.0125`** — KIS 원화결제 서비스 기준 편도 1.25% (환전 스프레드 1.0% + 매매수수료 0.25%). 왕복 약 2.5%. `US_DEFAULT_EXCHANGE_RATE=1380.0`은 첫 환율 조회 완전 실패 시에만 사용 (sticky cache 우선).
+- **`kis_client.get_usd_krw_rate()`** — `open.er-api.com` 1시간 캐시. 조회 실패 시 마지막 성공 환율 유지(sticky cache). 환율이 한 번도 조회되지 않은 상태에서 실패 시에만 `US_DEFAULT_EXCHANGE_RATE` 사용.
+- **Sheets "주식" 시트** — 재시작마다 `clear()` 후 `_US_STOCK_HEADERS` 18컬럼으로 초기화됨. 미국주식 거래 데이터만 누적. 국내주식 Sheets 로깅은 비활성(주석 처리).
+- **주식 봇 Telegram 명령** — 현재 4개만 활성 (`/us_start_sim`, `/us_stop`, `/us_status`, `/help`). 국내주식 명령은 `telegram_bot.py` `_handle_stock_command()`에 주석으로 보존. 복구 시 주석 해제.
 
 ## 최근 변경 이력
 
@@ -259,6 +291,9 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 2026-06-16 | 인프라 | feat(sheets): `sheets_client.py` 전면 재작성 — 기존 JSONL 자동 마이그레이션(`_migrate_historical`), 컬럼명 전체 대문자 통일, DATE+TIME 분리, "📋 테이블정의서" 시트 자동 생성 |
 | 2026-06-16 | 인프라 | 미국주식 KIS API 검증 (코드 변경 없음) — `/uapi/overseas-price/v1/` 경로, OHLCV TR `HHDFS76240000`, 현재가 TR `HHDFS00000300`, 소수점 주문 TR `TTTT1007U/1008U` 응답 정상 확인 |
 | 2026-06-16 | 인프라 | draft/us_stock_implementation_plan.md 작성 — 미국 소수점 거래로 코인·KOSPI 자금 스케일 미스매치 해결 방안 |
+| 2026-06-16 | 미국주식 | feat(us-stock): 미국주식 시뮬 모듈 신규 구축 (`core/stock/us_trader.py`, `core/stock/us_universe.py`) — KRW 기준 예산, 편도 1.25% 수수료, 매수 시 환율 기록(`entry_exchange_rate`), JSONL+Sheets에 `EXCHANGE_RATE`/`AMOUNT_KRW` 컬럼 추가 |
+| 2026-06-16 | 인프라 | refactor(sheets/telegram): 국내주식 Sheets 로깅 비활성, 주식 봇 Telegram 명령 13개 → 4개 (`/us_start_sim`, `/us_stop`, `/us_status`, `/help`) — 미국주식 전용 운영 전환 |
+| 2026-06-16 | 인프라 | fix(sheets): "주식" 시트 재시작 시 `clear()` 후 `_US_STOCK_HEADERS` 18컬럼으로 재초기화, 테이블정의서 레이블 "주식" 통일 |
 
 ## VPS 인프라
 
