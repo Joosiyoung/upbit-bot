@@ -8,14 +8,50 @@ _ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _BUFFER_FILE = os.path.join(_ROOT_DIR, "data", "sheets_buffer.jsonl")
 
 _COIN_HEADERS = [
-    "date", "time", "type", "ticker", "reason", "price", "amount_krw",
-    "profit_pct", "live", "threshold", "tp_pct", "sl_pct",
-    "trailing_start_pct", "trailing_stop_pct", "max_hold_hours",
+    "DATE", "TIME", "TYPE", "TICKER", "REASON", "PRICE", "AMOUNT_KRW",
+    "PROFIT_PCT", "LIVE", "THRESHOLD", "TP_PCT", "SL_PCT",
+    "TRAILING_START_PCT", "TRAILING_STOP_PCT", "MAX_HOLD_HOURS",
 ]
 _STOCK_HEADERS = [
-    "date", "ts", "type", "code", "name", "reason", "price", "qty",
-    "amount_krw", "profit_pct", "threshold", "tp_pct", "sl_pct",
-    "trailing_start_pct", "trailing_stop_pct", "max_hold_days",
+    "DATE", "TIME", "TYPE", "CODE", "NAME", "REASON", "PRICE", "QTY",
+    "AMOUNT_KRW", "PROFIT_PCT", "THRESHOLD", "TP_PCT", "SL_PCT",
+    "TRAILING_START_PCT", "TRAILING_STOP_PCT", "MAX_HOLD_DAYS",
+]
+
+_DEFINITION_HEADERS = ["시트", "컬럼명", "한국어명", "설명", "데이터타입", "형식/예시"]
+_DEFINITION_ROWS = [
+    ["코인", "DATE",               "일자",           "거래 발생 일자",                          "DATE",    "YYYY-MM-DD / 2026-06-16"],
+    ["코인", "TIME",               "시각",           "거래 발생 시각",                          "TIME",    "HH:MM:SS / 14:32:01"],
+    ["코인", "TYPE",               "거래유형",       "매수/매도 구분",                          "TEXT",    "buy / sell"],
+    ["코인", "TICKER",             "종목코드",       "Upbit 마켓 코드",                         "TEXT",    "KRW-BTC"],
+    ["코인", "REASON",             "거래사유",       "진입·청산 사유 메시지",                   "TEXT",    "강한 매수 (점수 15.0)"],
+    ["코인", "PRICE",              "체결가",         "거래 단가 (원)",                          "NUMBER",  "정수 / 92400000"],
+    ["코인", "AMOUNT_KRW",         "거래금액",       "거래 금액 (원)",                          "NUMBER",  "정수 / 18208"],
+    ["코인", "PROFIT_PCT",         "수익률",         "실현 수익률(%), 매수 시 공백",             "NUMBER",  "소수점2자리 / 1.23"],
+    ["코인", "LIVE",               "실거래여부",     "True=실거래 False=시뮬",                  "BOOLEAN", "True / False"],
+    ["코인", "THRESHOLD",          "진입임계치",     "매수 신호 점수 임계값",                   "NUMBER",  "정수 / 12"],
+    ["코인", "TP_PCT",             "익절비율",       "익절 기준 수익률(%)",                     "NUMBER",  "소수점1자리 / 5.0"],
+    ["코인", "SL_PCT",             "손절비율",       "손절 기준 손실률(%)",                     "NUMBER",  "소수점1자리 / 3.0"],
+    ["코인", "TRAILING_START_PCT", "트레일링활성수익", "트레일링 스탑 활성화 수익률(%)",        "NUMBER",  "소수점1자리 / 3.0"],
+    ["코인", "TRAILING_STOP_PCT",  "트레일링하락한도", "고점 대비 하락 허용 한도(%)",           "NUMBER",  "소수점1자리 / 1.5"],
+    ["코인", "MAX_HOLD_HOURS",     "최대보유시간",   "타임스탑 기준 보유 시간(시)",             "NUMBER",  "정수 / 48"],
+    [],  # 빈 행
+    ["주식", "DATE",               "일자",           "거래 발생 일자",                          "DATE",    "YYYY-MM-DD / 2026-06-16"],
+    ["주식", "TIME",               "시각",           "거래 발생 시각",                          "TIME",    "HH:MM:SS / 09:35:00"],
+    ["주식", "TYPE",               "거래유형",       "매수/매도 구분",                          "TEXT",    "buy / sell"],
+    ["주식", "CODE",               "종목코드",       "KRX 6자리 종목코드",                      "TEXT",    "005930"],
+    ["주식", "NAME",               "종목명",         "종목 한국어 명칭",                        "TEXT",    "삼성전자"],
+    ["주식", "REASON",             "거래사유",       "진입·청산 사유 메시지",                   "TEXT",    "강한 매수 (점수 15.0)"],
+    ["주식", "PRICE",              "체결가",         "거래 단가 (원)",                          "NUMBER",  "정수 / 75000"],
+    ["주식", "QTY",                "수량",           "거래 주식 수량(주)",                      "NUMBER",  "정수 / 10"],
+    ["주식", "AMOUNT_KRW",         "거래금액",       "거래 금액 (원)",                          "NUMBER",  "정수 / 750000"],
+    ["주식", "PROFIT_PCT",         "수익률",         "실현 수익률(%), 매수 시 공백",             "NUMBER",  "소수점2자리 / 1.23"],
+    ["주식", "THRESHOLD",          "진입임계치",     "매수 신호 점수 임계값",                   "NUMBER",  "정수 / 12"],
+    ["주식", "TP_PCT",             "익절비율",       "익절 기준 수익률(%)",                     "NUMBER",  "소수점1자리 / 5.0"],
+    ["주식", "SL_PCT",             "손절비율",       "손절 기준 손실률(%)",                     "NUMBER",  "소수점1자리 / 3.0"],
+    ["주식", "TRAILING_START_PCT", "트레일링활성수익", "트레일링 스탑 활성화 수익률(%)",        "NUMBER",  "소수점1자리 / 3.0"],
+    ["주식", "TRAILING_STOP_PCT",  "트레일링하락한도", "고점 대비 하락 허용 한도(%)",           "NUMBER",  "소수점1자리 / 1.5"],
+    ["주식", "MAX_HOLD_DAYS",      "최대보유일수",   "타임스탑 기준 보유 영업일(일)",           "NUMBER",  "정수 / 5"],
 ]
 
 
@@ -46,6 +82,8 @@ class SheetsClient:
             self._spreadsheet = self._gc.open_by_key(config.GOOGLE_SHEETS_ID)
             self._enabled = True
             logging.info("Sheets: 인증 성공 (spreadsheet_id=%s)", config.GOOGLE_SHEETS_ID)
+            self._create_definition_sheet()
+            self._migrate_historical()
         except Exception as e:
             logging.warning("Sheets: 초기화 실패 — %s", e)
 
@@ -55,14 +93,125 @@ class SheetsClient:
         try:
             try:
                 ws = self._spreadsheet.worksheet(title)
+                # 헤더 업데이트 (대문자 전환)
+                ws.update("A1", [headers])
             except Exception:
-                ws = self._spreadsheet.add_worksheet(title=title, rows=1000, cols=len(headers))
+                ws = self._spreadsheet.add_worksheet(title=title, rows=5000, cols=len(headers))
                 ws.append_row(headers, value_input_option="USER_ENTERED")
             self._worksheets[title] = ws
             return ws
         except Exception as e:
             logging.warning("Sheets: 시트 접근 실패 (%s) — %s", title, e)
             return None
+
+    def _create_definition_sheet(self):
+        title = "📋 테이블정의서"
+        try:
+            try:
+                ws = self._spreadsheet.worksheet(title)
+                ws.clear()
+            except Exception:
+                ws = self._spreadsheet.add_worksheet(title=title, rows=100, cols=6)
+            ws.append_row(_DEFINITION_HEADERS, value_input_option="USER_ENTERED")
+            ws.append_rows(_DEFINITION_ROWS, value_input_option="USER_ENTERED")
+            logging.info("Sheets: 테이블정의서 시트 업데이트 완료")
+        except Exception as e:
+            logging.warning("Sheets: 테이블정의서 생성 실패 — %s", e)
+
+    def _migrate_historical(self):
+        coin_path = os.path.join(_ROOT_DIR, "data", "trade_history.jsonl")
+        stock_path = os.path.join(_ROOT_DIR, "data", "stock_trade_history.jsonl")
+
+        # 코인 마이그레이션
+        try:
+            ws = self._get_or_create_sheet("코인", _COIN_HEADERS)
+            if ws is not None:
+                existing = len(ws.get_all_values()) - 1  # 헤더 제외
+                if existing > 0:
+                    logging.info("Sheets: 코인 시트 기존 데이터 %d행 — 마이그레이션 스킵", existing)
+                elif os.path.exists(coin_path):
+                    rows = []
+                    with open(coin_path, encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                rec = json.loads(line)
+                                if rec.get("type") not in ("buy", "sell"):
+                                    continue
+                                rows.append([
+                                    rec.get("date", ""),
+                                    rec.get("time", ""),
+                                    rec.get("type", ""),
+                                    rec.get("ticker", ""),
+                                    rec.get("reason", ""),
+                                    rec.get("price", ""),
+                                    rec.get("amount", ""),
+                                    rec.get("profit_pct", ""),
+                                    rec.get("live", ""),
+                                    rec.get("threshold", ""),
+                                    rec.get("tp_pct", ""),
+                                    rec.get("sl_pct", ""),
+                                    rec.get("trailing_start_pct", ""),
+                                    rec.get("trailing_stop_pct", ""),
+                                    rec.get("max_hold_hours", ""),
+                                ])
+                            except Exception:
+                                continue
+                    if rows:
+                        ws.append_rows(rows, value_input_option="USER_ENTERED")
+                        logging.info("Sheets: 코인 히스토리 %d행 마이그레이션 완료", len(rows))
+        except Exception as e:
+            logging.warning("Sheets: 코인 마이그레이션 실패 — %s", e)
+
+        # 주식 마이그레이션
+        try:
+            ws = self._get_or_create_sheet("주식", _STOCK_HEADERS)
+            if ws is not None:
+                existing = len(ws.get_all_values()) - 1
+                if existing > 0:
+                    logging.info("Sheets: 주식 시트 기존 데이터 %d행 — 마이그레이션 스킵", existing)
+                elif os.path.exists(stock_path):
+                    rows = []
+                    with open(stock_path, encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                rec = json.loads(line)
+                                if rec.get("side") not in ("buy", "sell"):
+                                    continue
+                                ts_val = rec.get("ts", "")
+                                date_str = ts_val[:10] if ts_val else ""
+                                time_str = ts_val[11:19] if len(ts_val) >= 19 else ""
+                                amount_krw = rec.get("price", 0) * rec.get("quantity", 0)
+                                rows.append([
+                                    date_str,
+                                    time_str,
+                                    rec.get("side", ""),
+                                    rec.get("code", ""),
+                                    rec.get("name", ""),
+                                    rec.get("reason", ""),
+                                    rec.get("price", ""),
+                                    rec.get("quantity", ""),
+                                    round(amount_krw),
+                                    rec.get("ret_pct", ""),
+                                    "",
+                                    "",
+                                    "",
+                                    "",
+                                    "",
+                                    "",
+                                ])
+                            except Exception:
+                                continue
+                    if rows:
+                        ws.append_rows(rows, value_input_option="USER_ENTERED")
+                        logging.info("Sheets: 주식 히스토리 %d행 마이그레이션 완료", len(rows))
+        except Exception as e:
+            logging.warning("Sheets: 주식 마이그레이션 실패 — %s", e)
 
     def _flush_buffer(self):
         if not self._enabled or not os.path.exists(_BUFFER_FILE):

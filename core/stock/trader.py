@@ -62,10 +62,11 @@ def _log_trade(record: dict):
             if sc is not None:
                 ts_val = record.get("ts", "")
                 date_str = ts_val[:10] if ts_val else ""
+                time_str = ts_val[11:19] if len(ts_val) >= 19 else ""
                 amount_krw = record.get("price", 0) * record.get("quantity", 0)
                 row = [
                     date_str,
-                    ts_val,
+                    time_str,
                     record.get("side", ""),
                     record.get("code", ""),
                     record.get("name", ""),
