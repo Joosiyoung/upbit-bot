@@ -440,7 +440,9 @@ def _stock_worker():
                         continue
 
                     latest_close = ind.get("close", 0)
-                    if latest_close <= 0 or latest_close > config.STOCK_MAX_PRICE:
+                    empty_slots = max(1, config.STOCK_MAX_POSITIONS - cur_positions)
+                    price_cap = sim_krw / empty_slots
+                    if latest_close <= 0 or latest_close > price_cap:
                         continue
 
                     sc = score_signal(ind) * 2.5
