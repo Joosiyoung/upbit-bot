@@ -175,3 +175,18 @@ STOCK_SIM_BUDGET = int(os.getenv("STOCK_SIM_BUDGET", "1000000"))  # 주식 시�
 # ─── Google Sheets 연동 ───
 GOOGLE_SHEETS_ID       = os.getenv("GOOGLE_SHEETS_ID", "")
 GOOGLE_SHEETS_KEY_FILE = os.getenv("GOOGLE_SHEETS_KEY_FILE", "warm-alliance-279008-58e85ac09da1.json")
+
+# ─── 미국주식 봇 파라미터 ───
+US_SIM_BUDGET               = float(os.getenv("US_SIM_BUDGET",               "1000000"))  # KRW 기준 시뮬 예산 (원화)
+US_MAX_POSITIONS            = int(os.getenv("US_MAX_POSITIONS",               "5"))
+US_BUY_SCORE_THRESHOLD      = float(os.getenv("US_BUY_SCORE_THRESHOLD",       "12"))
+US_MAX_LOSS_PERCENT         = float(os.getenv("US_MAX_LOSS_PERCENT",           "3.0"))
+US_TAKE_PROFIT_PERCENT      = float(os.getenv("US_TAKE_PROFIT_PERCENT",        "5.0"))
+US_TRAILING_START_PCT       = float(os.getenv("US_TRAILING_START_PCT",         "3.0"))
+US_TRAILING_STOP_PCT        = float(os.getenv("US_TRAILING_STOP_PCT",          "1.5"))
+US_MAX_HOLD_DAYS            = int(os.getenv("US_MAX_HOLD_DAYS",                "5"))
+US_FEE_RATE                 = float(os.getenv("US_FEE_RATE",                   "0.0125"))  # 편도 1.25% (환전 스프레드 1% + 매매 수수료 0.25%)
+US_ENTRY_CHANGE_MAX         = float(os.getenv("US_ENTRY_CHANGE_MAX",           "3.0"))
+US_ENTRY_CHANGE_MIN         = float(os.getenv("US_ENTRY_CHANGE_MIN",           "-3.0"))
+US_IS_LIVE                  = os.getenv("US_IS_LIVE", "False").lower() == "true"
+US_DEFAULT_EXCHANGE_RATE    = float(os.getenv("US_DEFAULT_EXCHANGE_RATE",      "1380.0"))  # USD/KRW fallback

@@ -119,6 +119,7 @@ core/
   notifier.py           # Telegram 알림 발송
   upbit_client.py       # pyupbit 래퍼
   ai_analysis.py        # Fear & Greed 조회·캐시 워커
+  sheets_client.py      # Google Sheets 실시간 거래 적재 (코인·주식 공통, 오프라인 버퍼링)
   stock/
     trader.py           # 주식 시뮬 매매 로직 + _stock_market_notifier(장 시작 알림 데몬)
     trading_control.py  # 주식 시작/중지/상태 (Flask ↔ Telegram 공용)
@@ -132,6 +133,7 @@ data/
   trade_history.jsonl       # 코인 거래 이력 (365일 보존)
   stock_trade_history.jsonl # 주식 시뮬 거래 이력
   stock_state.json          # 주식 시뮬 상태 (포지션·잔고, 재시작 복원)
+  sheets_buffer.jsonl       # Google Sheets 오프라인 버퍼 (네트워크 오류 시 임시 보관)
 logs/
   bot.log               # 운영 로그 (35일 보존, 자정 회전)
 ```
@@ -254,6 +256,9 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 2026-06-16 | 주식 | fix(stock): `build_stock_status_msg` 현재가 None fallback·평단가 수수료 이중반영·astimezone naive 분기·중복 KIS API 호출·락 일관성 수정 6건 |
 | 2026-06-16 | 주식 | universe: KB금융(105560) 제거 (KIS sandbox 상시 500 오류 종목) → 19종목 |
 | 2026-06-16 | 인프라 | Google Sheets 실시간 거래 적재 (`core/sheets_client.py`) — 코인/주식 2개 시트, 네트워크 오류 시 `data/sheets_buffer.jsonl` 버퍼링, sell 레코드에 전략 파라미터 임베드 |
+| 2026-06-16 | 인프라 | feat(sheets): `sheets_client.py` 전면 재작성 — 기존 JSONL 자동 마이그레이션(`_migrate_historical`), 컬럼명 전체 대문자 통일, DATE+TIME 분리, "📋 테이블정의서" 시트 자동 생성 |
+| 2026-06-16 | 인프라 | 미국주식 KIS API 검증 (코드 변경 없음) — `/uapi/overseas-price/v1/` 경로, OHLCV TR `HHDFS76240000`, 현재가 TR `HHDFS00000300`, 소수점 주문 TR `TTTT1007U/1008U` 응답 정상 확인 |
+| 2026-06-16 | 인프라 | draft/us_stock_implementation_plan.md 작성 — 미국 소수점 거래로 코인·KOSPI 자금 스케일 미스매치 해결 방안 |
 
 ## VPS 인프라
 

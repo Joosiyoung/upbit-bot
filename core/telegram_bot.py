@@ -598,20 +598,26 @@ _STOCK_HELP_TEXT = (
     "/start_sim [금액] — 주식 시뮬 시작 (생략 시 KIS 잔고)\n"
     "/start_live — 실거래 시작 (미지원)\n"
     "/stop — 주식 시뮬 중지\n"
+    "/us_start_sim [$금액] — 미국주식 시뮬 시작\n"
+    "/us_stop — 미국주식 시뮬 중지\n"
+    "/us_status — 미국주식 현황\n"
     "/help — 이 도움말"
 )
 
 _STOCK_BOT_COMMANDS = [
-    {"command": "status",     "description": "시뮬 상태·잔고·포지션 요약"},
-    {"command": "perf",       "description": "누적 성과 (승률·손익)"},
-    {"command": "positions",  "description": "보유 포지션 상세"},
-    {"command": "history",    "description": "최근 거래 이력 [n]"},
-    {"command": "params",     "description": "현재 파라미터 조회"},
-    {"command": "market",     "description": "장중/장외 상태 확인"},
-    {"command": "start_sim",  "description": "주식 시뮬 시작 [예산]"},
-    {"command": "start_live", "description": "실거래 시작 (미지원)"},
-    {"command": "stop",       "description": "주식 시뮬 중지"},
-    {"command": "help",       "description": "도움말"},
+    {"command": "status",       "description": "시뮬 상태·잔고·포지션 요약"},
+    {"command": "perf",         "description": "누적 성과 (승률·손익)"},
+    {"command": "positions",    "description": "보유 포지션 상세"},
+    {"command": "history",      "description": "최근 거래 이력 [n]"},
+    {"command": "params",       "description": "현재 파라미터 조회"},
+    {"command": "market",       "description": "장중/장외 상태 확인"},
+    {"command": "start_sim",    "description": "주식 시뮬 시작 [예산]"},
+    {"command": "start_live",   "description": "실거래 시작 (미지원)"},
+    {"command": "stop",         "description": "주식 시뮬 중지"},
+    {"command": "us_start_sim", "description": "미국주식 시뮬 시작 [$예산]"},
+    {"command": "us_stop",      "description": "미국주식 시뮬 중지"},
+    {"command": "us_status",    "description": "미국주식 현황"},
+    {"command": "help",         "description": "도움말"},
 ]
 
 _STOCK_REPLY_KEYBOARD = {
@@ -968,6 +974,41 @@ def _handle_stock_command(cmd: str, arg: str | None = None):
         from core.stock.trader import stop_stock_trading
         result = stop_stock_trading()
         reply(result)
+
+    elif cmd == "/us_start_sim":
+        import core.stock.us_trader as _us_mod
+        from core.stock.us_trader import start_us_sim
+        with _us_mod._us_lock:
+            running = _us_mod._us_running
+        if running:
+            reply("이미 미국주식 시뮬이 실행 중입니다. /us_stop 으로 중지하세요.")
+        else:
+            budget = None
+            if arg:
+                raw = arg.strip().lstrip("$").replace(",", "")
+                try:
+                    budget = float(raw)
+                except ValueError:
+                    reply("⚠️ 금액이 올바르지 않습니다. 예: /us_start_sim 1000")
+                    return
+                if budget <= 0:
+                    reply("⚠️ 예산은 0보다 커야 합니다.")
+                    return
+            result = start_us_sim(budget)
+            reply(result.get("msg", "시작 실패"))
+
+    elif cmd == "/us_stop":
+        from core.stock.us_trader import stop_us
+        result = stop_us()
+        reply(result.get("msg", "중지됨"))
+
+    elif cmd == "/us_status":
+        try:
+            from core.stock.us_trader import build_us_status_msg
+            reply(build_us_status_msg())
+        except Exception as e:
+            logging.exception("Telegram(주식) /us_status 처리 오류")
+            reply(f"⚠️ 미국주식 상태 조회 오류: {html.escape(str(e)[:100])}")
 
     else:
         reply(f"알 수 없는 명령: {html.escape(cmd)}\n/help 로 명령어를 확인하세요.")

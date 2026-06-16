@@ -1,6 +1,6 @@
 # Upbit 자동매매 봇
 
-Flask + pyupbit 기반 코인 자동매매 봇 + KIS API 기반 국내 주식 자동매매 봇. 대시보드(웹) + Telegram 원격 제어 + Oracle Cloud VPS 24시간 운영.
+Flask + pyupbit 기반 코인 자동매매 봇 + KIS API 기반 국내/미국 주식 자동매매 봇. 대시보드(웹) + Telegram 원격 제어 + Oracle Cloud VPS 24시간 운영.
 
 ---
 
@@ -46,17 +46,25 @@ core/
   notifier.py            # Telegram 알림 발송
   upbit_client.py        # pyupbit 래퍼
   ai_analysis.py         # Fear & Greed 조회·캐시 워커
-  stock/                 # 국내 주식 자동매매 모듈 (KIS API)
-    trader.py            # 주식 시뮬 매매 로직 + _stock_market_notifier(장 시작 알림 데몬)
-    trading_control.py   # 주식 시작/중지/상태 (Flask ↔ Telegram 공용)
+  sheets_client.py       # Google Sheets 실시간 거래 적재 (코인·주식 공통, 오프라인 버퍼링)
+  stock/                 # 국내/미국 주식 자동매매 모듈 (KIS API)
+    trader.py            # 국내 주식 시뮬 매매 로직 + _stock_market_notifier(장 시작 알림 데몬)
+    trading_control.py   # 국내 주식 시작/중지/상태 (Flask ↔ Telegram 공용)
+    us_trader.py         # 미국주식 소수점 거래 트레이더 (is_us_market_hours, _us_worker)
+    us_universe.py       # 미국주식 유니버스 (NASDAQ/NYSE 20종목)
     kis_auth.py          # KIS OAuth2 토큰 관리
-    kis_client.py        # KIS API 래퍼 (OHLCV·현재가)
-    universe.py          # 매매 대상 종목 풀 (KOSPI 대형주 19종목)
+    kis_client.py        # KIS API 래퍼 (국내 OHLCV·현재가 + 해외 OHLCV·현재가·소수점 주문)
+    universe.py          # 국내 매매 대상 종목 풀 (KOSPI 대형주 19종목)
 scripts/
   backtest.py            # 백테스터 (라이브 룰 동일 재현)
   stock_backtest.py      # 주식 백테스터 (KIS OHLCV → score_signal)
 data/
-  trade_history.jsonl    # 거래 이력 (365일 보존)
+  trade_history.jsonl         # 코인 거래 이력 (365일 보존)
+  stock_trade_history.jsonl   # 주식 시뮬 거래 이력
+  stock_state.json            # 국내 주식 시뮬 상태 (포지션·잔고, 재시작 복원)
+  us_stock_state.json         # 미국주식 시뮬 상태 (포지션·달러 잔고, 재시작 복원)
+  us_stock_trade_history.jsonl # 미국주식 시뮬 거래 이력
+  sheets_buffer.jsonl         # Google Sheets 오프라인 버퍼 (네트워크 오류 시 임시 보관)
 logs/
   bot.log                # 운영 로그 (35일 보존, 자정 일 단위 회전)
 ```
@@ -121,7 +129,26 @@ logs/
 | `STOCK_ADD_BUY_MAX_PROFIT` | `2.0` | 추가매수 허용 최대 수익률 (%). 고점 추격매수 방지 |
 | `STOCK_MAX_SLOTS_PER_TICKER` | `2` | 종목당 최대 슬롯 수 (추가매수 포함 상한) |
 
+### 미국주식 봇
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `US_SIM_BUDGET` | `1000000` | 미국주식 시뮬 초기 예산 (KRW 원화 기준, 매수 시 환율로 USD 환산) |
+| `US_MAX_POSITIONS` | `5` | 최대 동시 보유 종목 수 |
+| `US_BUY_SCORE_THRESHOLD` | `12` | 진입 점수 임계치 |
+| `US_MAX_LOSS_PERCENT` | `3.0` | 손절 (%) |
+| `US_TAKE_PROFIT_PERCENT` | `5.0` | 익절 (%) |
+| `US_TRAILING_START_PCT` | `3.0` | 트레일링 스탑 활성화 수익률 (%) |
+| `US_TRAILING_STOP_PCT` | `1.5` | 고점 대비 하락 한도 (%) |
+| `US_MAX_HOLD_DAYS` | `5` | time-stop (일수) |
+| `US_FEE_RATE` | `0.0125` | 편도 수수료율 (KIS 환전 스프레드 1% + 매매 수수료 0.25%, 왕복 약 2.5%) |
+| `US_DEFAULT_EXCHANGE_RATE` | `1380.0` | USD/KRW 환율 fallback (open.er-api.com 조회 실패 시 사용) |
+| `US_ENTRY_CHANGE_MAX` | `3.0` | 당일 등락률 상한 (%). 초과 시 진입 차단 |
+| `US_ENTRY_CHANGE_MIN` | `-3.0` | 당일 등락률 하한 (%). 미만 시 진입 차단 |
+| `US_IS_LIVE` | `False` | True=실거래 주문. **기본값 False(시뮬 전용)** |
+
 > **VPS 배포 후**: VPS `.env`는 git 미추적이므로 `KIS_APP_KEY_SANDBOX`, `KIS_APP_SECRET_SANDBOX`, `KIS_ACCOUNT_NO_SANDBOX` (또는 REAL 세트) 6개 변수를 VPS에서 직접 추가해야 KIS 기능이 활성화됩니다.
+> 미국주식 실거래 전환 시 `US_IS_LIVE=True`를 추가하고 `KIS_APP_KEY_REAL` 실거래 세트가 설정되어 있어야 합니다.
 
 ---
 
@@ -141,6 +168,12 @@ logs/
 4. 진입 점수 × 2.5 < `STOCK_BUY_SCORE_THRESHOLD` (12)
 5. 당일 매도 이력 — `_stock_sold_today`에 기록된 종목 당일 재진입 차단
 6. 당일 등락률 범위 초과 — `STOCK_ENTRY_CHANGE_MIN`(-3%) ~ `STOCK_ENTRY_CHANGE_MAX`(+2%) 벗어난 종목 차단
+
+**미국주식 매수 차단 게이트 (순서)**
+1. 장 외 시간 — KST 22:30~05:00 범위 외 또는 주말이면 워커 비활성
+2. 진입 등락률 범위 초과 — `US_ENTRY_CHANGE_MIN`(-3%) ~ `US_ENTRY_CHANGE_MAX`(+3%) 벗어난 종목 차단
+3. 당일 매도 이력 — `_us_sold_today`에 기록된 종목 당일 재진입 차단
+4. 진입 점수 < `US_BUY_SCORE_THRESHOLD` (12)
 
 **청산 우선순위 (Phase 1)**
 상장폐지 → 익절 → 손절 → 트레일링 스탑 → 매도 신호 → time-stop
@@ -180,6 +213,14 @@ logs/
 | `/liquidate` | 중지 + 전액 청산 (/confirm 필요) |
 | `/help` | 명령어 목록 |
 | (자동) 매일 09:00 KST | 전일 09:00 ~ 당일 08:59 거래 통계 자동 전송 (시뮬/실거래 분리) |
+
+### 미국주식 봇 (주식 봇 Telegram 공용, `/us_*` 접두사)
+
+| 명령 | 동작 |
+|------|------|
+| `/us_start_sim [금액]` | 미국주식 시뮬 시작. 금액(KRW 원화) 미입력 시 `US_SIM_BUDGET` 기본값(100만원) 사용 |
+| `/us_stop` | 미국주식 시뮬 중지 (보유 포지션 유지) |
+| `/us_status` | 미국주식 시뮬 상태·원화 잔고·포지션 요약 |
 
 ### 주식 봇 (`TELEGRAM_STOCK_BOT_TOKEN`)
 

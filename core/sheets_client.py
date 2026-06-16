@@ -18,6 +18,12 @@ _STOCK_HEADERS = [
     "TRAILING_START_PCT", "TRAILING_STOP_PCT", "MAX_HOLD_DAYS",
 ]
 
+_US_STOCK_HEADERS = [
+    "DATE", "TIME", "TYPE", "SYMBOL", "NAME", "EXCHANGE", "PRICE_USD", "QTY",
+    "AMOUNT_USD", "EXCHANGE_RATE", "AMOUNT_KRW", "PROFIT_PCT", "THRESHOLD", "TP_PCT", "SL_PCT",
+    "TRAILING_START_PCT", "TRAILING_STOP_PCT", "MAX_HOLD_DAYS",
+]
+
 _DEFINITION_HEADERS = ["시트", "컬럼명", "한국어명", "설명", "데이터타입", "형식/예시"]
 _DEFINITION_ROWS = [
     ["코인", "DATE",               "일자",           "거래 발생 일자",                          "DATE",    "YYYY-MM-DD / 2026-06-16"],
@@ -52,6 +58,25 @@ _DEFINITION_ROWS = [
     ["주식", "TRAILING_START_PCT", "트레일링활성수익", "트레일링 스탑 활성화 수익률(%)",        "NUMBER",  "소수점1자리 / 3.0"],
     ["주식", "TRAILING_STOP_PCT",  "트레일링하락한도", "고점 대비 하락 허용 한도(%)",           "NUMBER",  "소수점1자리 / 1.5"],
     ["주식", "MAX_HOLD_DAYS",      "최대보유일수",   "타임스탑 기준 보유 영업일(일)",           "NUMBER",  "정수 / 5"],
+    [],  # 빈 행
+    ["미국주식", "DATE",               "일자",           "거래 발생 일자",                          "DATE",    "YYYY-MM-DD / 2026-06-16"],
+    ["미국주식", "TIME",               "시각",           "거래 발생 시각",                          "TIME",    "HH:MM:SS / 22:35:00"],
+    ["미국주식", "TYPE",               "거래유형",       "매수/매도 구분",                          "TEXT",    "buy / sell"],
+    ["미국주식", "SYMBOL",             "종목심볼",       "NASDAQ/NYSE 티커 심볼",                   "TEXT",    "AAPL"],
+    ["미국주식", "NAME",               "종목명",         "종목 영문 명칭",                          "TEXT",    "Apple"],
+    ["미국주식", "EXCHANGE",           "거래소",         "거래소 코드",                             "TEXT",    "NAS / NYS"],
+    ["미국주식", "PRICE_USD",          "체결가(USD)",    "거래 단가 (달러)",                        "NUMBER",  "소수점4자리 / 192.5000"],
+    ["미국주식", "QTY",                "수량",           "소수점 주식 수량",                        "NUMBER",  "소수점4자리 / 5.1948"],
+    ["미국주식", "AMOUNT_USD",         "거래금액(USD)",  "거래 금액 (달러)",                        "NUMBER",  "소수점2자리 / 200.00"],
+    ["미국주식", "EXCHANGE_RATE",      "환율(USD/KRW)", "매수/매도 시 적용 환율 (원/달러)",          "NUMBER",  "소수점2자리 / 1384.50"],
+    ["미국주식", "AMOUNT_KRW",         "거래금액(KRW)", "거래 금액 (원화 환산)",                     "NUMBER",  "정수 / 276900"],
+    ["미국주식", "PROFIT_PCT",         "수익률",         "실현 수익률(%), 매수 시 공백",             "NUMBER",  "소수점2자리 / 1.23"],
+    ["미국주식", "THRESHOLD",          "진입임계치",     "매수 신호 점수 임계값",                   "NUMBER",  "정수 / 12"],
+    ["미국주식", "TP_PCT",             "익절비율",       "익절 기준 수익률(%)",                     "NUMBER",  "소수점1자리 / 5.0"],
+    ["미국주식", "SL_PCT",             "손절비율",       "손절 기준 손실률(%)",                     "NUMBER",  "소수점1자리 / 3.0"],
+    ["미국주식", "TRAILING_START_PCT", "트레일링활성수익", "트레일링 스탑 활성화 수익률(%)",        "NUMBER",  "소수점1자리 / 3.0"],
+    ["미국주식", "TRAILING_STOP_PCT",  "트레일링하락한도", "고점 대비 하락 허용 한도(%)",           "NUMBER",  "소수점1자리 / 1.5"],
+    ["미국주식", "MAX_HOLD_DAYS",      "최대보유일수",   "타임스탑 기준 보유 캘린더 일(일)",        "NUMBER",  "정수 / 5"],
 ]
 
 
@@ -232,7 +257,12 @@ class SheetsClient:
                 item = json.loads(line)
                 sheet_title = item["sheet"]
                 row = item["row"]
-                headers = _COIN_HEADERS if sheet_title == "코인" else _STOCK_HEADERS
+                if sheet_title == "코인":
+                    headers = _COIN_HEADERS
+                elif sheet_title == "미국주식":
+                    headers = _US_STOCK_HEADERS
+                else:
+                    headers = _STOCK_HEADERS
                 ws = self._get_or_create_sheet(sheet_title, headers)
                 if ws is None:
                     remaining.append(line)
@@ -261,7 +291,12 @@ class SheetsClient:
         if not self._enabled:
             return
         self._flush_buffer()
-        headers = _COIN_HEADERS if sheet_title == "코인" else _STOCK_HEADERS
+        if sheet_title == "코인":
+            headers = _COIN_HEADERS
+        elif sheet_title == "미국주식":
+            headers = _US_STOCK_HEADERS
+        else:
+            headers = _STOCK_HEADERS
         try:
             ws = self._get_or_create_sheet(sheet_title, headers)
             if ws is None:
