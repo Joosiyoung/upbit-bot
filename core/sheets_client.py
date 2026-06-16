@@ -60,24 +60,24 @@ _DEFINITION_ROWS = [
     # ["주식", "TRAILING_STOP_PCT",  "트레일링하락한도", "고점 대비 하락 허용 한도(%)",           "NUMBER",  "소수점1자리 / 1.5"],
     # ["주식", "MAX_HOLD_DAYS",      "최대보유일수",   "타임스탑 기준 보유 영업일(일)",           "NUMBER",  "정수 / 5"],
     [],  # 빈 행
-    ["미국주식", "DATE",               "일자",           "거래 발생 일자",                          "DATE",    "YYYY-MM-DD / 2026-06-16"],
-    ["미국주식", "TIME",               "시각",           "거래 발생 시각",                          "TIME",    "HH:MM:SS / 22:35:00"],
-    ["미국주식", "TYPE",               "거래유형",       "매수/매도 구분",                          "TEXT",    "buy / sell"],
-    ["미국주식", "SYMBOL",             "종목심볼",       "NASDAQ/NYSE 티커 심볼",                   "TEXT",    "AAPL"],
-    ["미국주식", "NAME",               "종목명",         "종목 영문 명칭",                          "TEXT",    "Apple"],
-    ["미국주식", "EXCHANGE",           "거래소",         "거래소 코드",                             "TEXT",    "NAS / NYS"],
-    ["미국주식", "PRICE_USD",          "체결가(USD)",    "거래 단가 (달러)",                        "NUMBER",  "소수점4자리 / 192.5000"],
-    ["미국주식", "QTY",                "수량",           "소수점 주식 수량",                        "NUMBER",  "소수점4자리 / 5.1948"],
-    ["미국주식", "AMOUNT_USD",         "거래금액(USD)",  "거래 금액 (달러)",                        "NUMBER",  "소수점2자리 / 200.00"],
-    ["미국주식", "EXCHANGE_RATE",      "환율(USD/KRW)", "매수/매도 시 적용 환율 (원/달러)",          "NUMBER",  "소수점2자리 / 1384.50"],
-    ["미국주식", "AMOUNT_KRW",         "거래금액(KRW)", "거래 금액 (원화 환산)",                     "NUMBER",  "정수 / 276900"],
-    ["미국주식", "PROFIT_PCT",         "수익률",         "실현 수익률(%), 매수 시 공백",             "NUMBER",  "소수점2자리 / 1.23"],
-    ["미국주식", "THRESHOLD",          "진입임계치",     "매수 신호 점수 임계값",                   "NUMBER",  "정수 / 12"],
-    ["미국주식", "TP_PCT",             "익절비율",       "익절 기준 수익률(%)",                     "NUMBER",  "소수점1자리 / 5.0"],
-    ["미국주식", "SL_PCT",             "손절비율",       "손절 기준 손실률(%)",                     "NUMBER",  "소수점1자리 / 3.0"],
-    ["미국주식", "TRAILING_START_PCT", "트레일링활성수익", "트레일링 스탑 활성화 수익률(%)",        "NUMBER",  "소수점1자리 / 3.0"],
-    ["미국주식", "TRAILING_STOP_PCT",  "트레일링하락한도", "고점 대비 하락 허용 한도(%)",           "NUMBER",  "소수점1자리 / 1.5"],
-    ["미국주식", "MAX_HOLD_DAYS",      "최대보유일수",   "타임스탑 기준 보유 캘린더 일(일)",        "NUMBER",  "정수 / 5"],
+    ["주식", "DATE",               "일자",           "거래 발생 일자",                          "DATE",    "YYYY-MM-DD / 2026-06-16"],
+    ["주식", "TIME",               "시각",           "거래 발생 시각",                          "TIME",    "HH:MM:SS / 22:35:00"],
+    ["주식", "TYPE",               "거래유형",       "매수/매도 구분",                          "TEXT",    "buy / sell"],
+    ["주식", "SYMBOL",             "종목심볼",       "NASDAQ/NYSE 티커 심볼",                   "TEXT",    "AAPL"],
+    ["주식", "NAME",               "종목명",         "종목 영문 명칭",                          "TEXT",    "Apple"],
+    ["주식", "EXCHANGE",           "거래소",         "거래소 코드",                             "TEXT",    "NAS / NYS"],
+    ["주식", "PRICE_USD",          "체결가(USD)",    "거래 단가 (달러)",                        "NUMBER",  "소수점4자리 / 192.5000"],
+    ["주식", "QTY",                "수량",           "소수점 주식 수량",                        "NUMBER",  "소수점4자리 / 5.1948"],
+    ["주식", "AMOUNT_USD",         "거래금액(USD)",  "거래 금액 (달러)",                        "NUMBER",  "소수점2자리 / 200.00"],
+    ["주식", "EXCHANGE_RATE",      "환율(USD/KRW)", "매수/매도 시 적용 환율 (원/달러)",          "NUMBER",  "소수점2자리 / 1384.50"],
+    ["주식", "AMOUNT_KRW",         "거래금액(KRW)", "거래 금액 (원화 환산)",                     "NUMBER",  "정수 / 276900"],
+    ["주식", "PROFIT_PCT",         "수익률",         "실현 수익률(%), 매수 시 공백",             "NUMBER",  "소수점2자리 / 1.23"],
+    ["주식", "THRESHOLD",          "진입임계치",     "매수 신호 점수 임계값",                   "NUMBER",  "정수 / 12"],
+    ["주식", "TP_PCT",             "익절비율",       "익절 기준 수익률(%)",                     "NUMBER",  "소수점1자리 / 5.0"],
+    ["주식", "SL_PCT",             "손절비율",       "손절 기준 손실률(%)",                     "NUMBER",  "소수점1자리 / 3.0"],
+    ["주식", "TRAILING_START_PCT", "트레일링활성수익", "트레일링 스탑 활성화 수익률(%)",        "NUMBER",  "소수점1자리 / 3.0"],
+    ["주식", "TRAILING_STOP_PCT",  "트레일링하락한도", "고점 대비 하락 허용 한도(%)",           "NUMBER",  "소수점1자리 / 1.5"],
+    ["주식", "MAX_HOLD_DAYS",      "최대보유일수",   "타임스탑 기준 보유 캘린더 일(일)",        "NUMBER",  "정수 / 5"],
 ]
 
 
@@ -238,6 +238,20 @@ class SheetsClient:
         #                 logging.info("Sheets: 주식 히스토리 %d행 마이그레이션 완료", len(rows))
         # except Exception as e:
         #     logging.warning("Sheets: 주식 마이그레이션 실패 — %s", e)
+
+        # 주식 시트를 미국주식 전용으로 초기화 (기존 국내주식 데이터 전체 삭제)
+        try:
+            try:
+                ws_stock = self._spreadsheet.worksheet("주식")
+                ws_stock.clear()
+                ws_stock.update("A1", [_US_STOCK_HEADERS])
+            except Exception:
+                ws_stock = self._spreadsheet.add_worksheet(title="주식", rows=5000, cols=len(_US_STOCK_HEADERS))
+                ws_stock.update("A1", [_US_STOCK_HEADERS])
+            self._worksheets["주식"] = ws_stock
+            logging.info("Sheets: 주식 시트 미국주식 전용으로 초기화 완료")
+        except Exception as e:
+            logging.warning("Sheets: 주식 시트 초기화 실패 — %s", e)
 
     def _flush_buffer(self):
         if not self._enabled or not os.path.exists(_BUFFER_FILE):
