@@ -6,7 +6,7 @@ import math
 import os
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 
 from core import config
 from core import notifier
@@ -25,6 +25,9 @@ _stock_trading_state: dict = {
     "started_at": None,
 }
 _stock_positions: dict[str, dict] = {}
+_stock_sold_today: dict[str, "date"] = {}   # 당일 매도 종목 → 재진입 차단
+_daily_signal_cache: dict[str, tuple] = {}   # code → (ind, score)
+_daily_signal_cache_date: "date | None" = None
 _stock_lock = threading.Lock()
 
 
@@ -285,11 +288,35 @@ def _build_stock_daily_report() -> str:
     return "\n".join(lines)
 
 
+def _get_daily_signal(client, code: str):
+    """일봉 신호를 캐시에서 반환. 당일 캐시가 없으면 KIS 조회 후 저장."""
+    from core.indicators import add_all_indicators, get_latest_indicators
+    from core.analysis import score_signal
+    global _daily_signal_cache, _daily_signal_cache_date
+    today = datetime.now(_KST).date()
+    if _daily_signal_cache_date != today:
+        _daily_signal_cache.clear()
+        _daily_signal_cache_date = today
+    if code in _daily_signal_cache:
+        return _daily_signal_cache[code]
+    try:
+        daily = client.get_ohlcv(code, "day", 120)
+        daily = add_all_indicators(daily)
+        if daily.empty or len(daily) < 2:
+            return None
+        ind = get_latest_indicators(daily, completed=True)
+        sc = score_signal(ind) * 2.5
+        _daily_signal_cache[code] = (ind, sc)
+        return _daily_signal_cache[code]
+    except Exception:
+        logging.warning("일봉 신호 조회 실패: %s", code)
+        return None
+
+
 def _stock_worker():
     from core.stock.kis_client import KisClient
     from core.stock.universe import get_universe
-    from core.indicators import add_all_indicators, get_latest_indicators
-    from core.analysis import score_signal, action_from_score
+    from core.analysis import action_from_score
 
     close_h, close_m = (int(x) for x in config.STOCK_BUY_CLOSE_TIME.split(":"))
     market_was_open = is_market_hours()
@@ -364,17 +391,12 @@ def _stock_worker():
                     sell_reason = "time-stop"
                 else:
                     # 매도 신호 체크
-                    try:
-                        daily = client.get_ohlcv(code, "day", 120)
-                        daily = add_all_indicators(daily)
-                        if not daily.empty and len(daily) >= 2:
-                            ind = get_latest_indicators(daily, completed=True)
-                            sc = score_signal(ind) * 2.5
-                            _, action_cls = action_from_score(sc)
-                            if action_cls == "sell-strong":
-                                sell_reason = "매도신호"
-                    except Exception:
-                        logging.warning("주식 매도신호 체크 실패: %s", code)
+                    result = _get_daily_signal(client, code)
+                    if result is not None:
+                        ind_s, sc_s = result
+                        _, action_cls = action_from_score(sc_s)
+                        if action_cls == "sell-strong":
+                            sell_reason = "매도신호"
 
                 if sell_reason:
                     ret_pct = (current_price * (1 - FEE_RATE)) / (entry_price * (1 + FEE_RATE)) - 1
@@ -385,6 +407,7 @@ def _stock_worker():
                         if code in _stock_positions:
                             _stock_positions.pop(code)
                             _stock_trading_state["sim_krw"] += proceeds
+                            _stock_sold_today[code] = now.date()
                             _save_state()
 
                     record = {
@@ -429,16 +452,13 @@ def _stock_worker():
                         break
                     if code in held_codes:
                         continue
+                    if _stock_sold_today.get(code) == now.date():
+                        continue  # 당일 매도 종목 재진입 차단
 
-                    try:
-                        daily = client.get_ohlcv(code, "day", 120)
-                        daily = add_all_indicators(daily)
-                        if daily.empty or len(daily) < 2:
-                            continue
-                        ind = get_latest_indicators(daily, completed=True)
-                    except Exception:
-                        logging.warning("주식 데이터 수집 실패: %s", code)
+                    result = _get_daily_signal(client, code)
+                    if result is None:
                         continue
+                    ind, sc = result
 
                     latest_close = ind.get("close", 0)
                     empty_slots = max(1, config.STOCK_MAX_POSITIONS - cur_positions)
@@ -446,7 +466,6 @@ def _stock_worker():
                     if latest_close <= 0 or latest_close > price_cap:
                         continue
 
-                    sc = score_signal(ind) * 2.5
                     if sc < config.STOCK_BUY_SCORE_THRESHOLD:
                         continue
 
@@ -458,6 +477,13 @@ def _stock_worker():
 
                     if not current_price:
                         continue
+
+                    prev_close = ind.get("close", 0)
+                    if prev_close > 0:
+                        daily_change_pct = (current_price / prev_close - 1) * 100
+                        if not (config.STOCK_ENTRY_CHANGE_MIN <= daily_change_pct <= config.STOCK_ENTRY_CHANGE_MAX):
+                            logging.debug("등락률 필터: %s %.1f%%", code, daily_change_pct)
+                            continue
 
                     with _stock_lock:
                         cur_positions = len(_stock_positions)
@@ -551,17 +577,18 @@ def _stock_worker():
                         if profit_pct < config.STOCK_ADD_BUY_MIN_PROFIT or profit_pct > config.STOCK_ADD_BUY_MAX_PROFIT:
                             continue
                         # 진입 점수 확인
-                        try:
-                            daily = client.get_ohlcv(code, "day", 120)
-                            daily = add_all_indicators(daily)
-                            if daily.empty or len(daily) < 2:
+                        result_add = _get_daily_signal(client, code)
+                        if result_add is None:
+                            continue
+                        ind_add, sc_add = result_add
+                        if sc_add < config.STOCK_BUY_SCORE_THRESHOLD:
+                            continue
+                        # 등락률 필터
+                        prev_close_add = ind_add.get("close", 0)
+                        if prev_close_add > 0:
+                            daily_change_pct_add = (current_price / prev_close_add - 1) * 100
+                            if not (config.STOCK_ENTRY_CHANGE_MIN <= daily_change_pct_add <= config.STOCK_ENTRY_CHANGE_MAX):
                                 continue
-                            ind = get_latest_indicators(daily, completed=True)
-                        except Exception:
-                            continue
-                        sc = score_signal(ind) * 2.5
-                        if sc < config.STOCK_BUY_SCORE_THRESHOLD:
-                            continue
                         # 매수 실행
                         quantity = math.floor(slot_budget / current_price)
                         if quantity <= 0:
@@ -585,7 +612,7 @@ def _stock_worker():
                             _stock_trading_state["sim_krw"] = max(0.0, _stock_trading_state["sim_krw"] - cost)
                             empty_slots -= 1
                             _save_state()
-                        add_reason = f"추가매수: 강한 매수 (점수 {sc:.1f}, 수익 {profit_pct:+.1f}%)"
+                        add_reason = f"추가매수: 강한 매수 (점수 {sc_add:.1f}, 수익 {profit_pct:+.1f}%)"
                         _log_trade({
                             "code":     code,
                             "name":     name_add,
