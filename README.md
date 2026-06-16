@@ -47,6 +47,8 @@ core/
   upbit_client.py        # pyupbit 래퍼
   ai_analysis.py         # Fear & Greed 조회·캐시 워커
   stock/                 # 국내 주식 자동매매 모듈 (KIS API)
+    trader.py            # 주식 시뮬 매매 로직 + _stock_market_notifier(장 시작 알림 데몬)
+    trading_control.py   # 주식 시작/중지/상태 (Flask ↔ Telegram 공용)
     kis_auth.py          # KIS OAuth2 토큰 관리
     kis_client.py        # KIS API 래퍼 (OHLCV·현재가)
     universe.py          # 매매 대상 종목 풀 (KOSPI 대형주)
@@ -108,8 +110,14 @@ logs/
 | `STOCK_DAILY_LOSS_LIMIT_PCT` | `5.0` | 주식 일일 손실 한도 초과 시 당일 매수 차단 |
 | `STOCK_FEE_RATE` | `0.003` | 주식 시뮬 수수료율 (매수+매도+세금 합산) |
 | `STOCK_MAX_PRICE` | `200000` | 1주 가격이 이 금액 초과 시 진입 스킵. 투자금/MAX_POSITIONS를 기준으로 설정 |
-| `STOCK_BUY_CLOSE_TIME` | `15:20` | 신규 매수 마감 시각 (잔여 시간 진입 방지) |
+| `STOCK_BUY_CLOSE_TIME` | `15:20` | 신규 매수 마감 시각 (잔여 시간 진입 방지). 시뮬 모드에서는 비활성화 |
 | `STOCK_REGIME_FILTER` | `True` | KOSPI EMA 하락 시 전 종목 매수 차단 |
+| `STOCK_ENTRY_CHANGE_MAX` | `2.0` | 당일 등락률 상한 (%). 이 값 초과 시 진입 차단 (갭업 추격 방지) |
+| `STOCK_ENTRY_CHANGE_MIN` | `-3.0` | 당일 등락률 하한 (%). 이 값 미만 시 진입 차단 (폭락 종목 차단) |
+| `STOCK_ADD_BUY_ENABLED` | `True` | 추가매수 기능 활성화 여부 |
+| `STOCK_ADD_BUY_MIN_PROFIT` | `0.0` | 추가매수 허용 최소 수익률 (%). 손실 중 물타기 방지 |
+| `STOCK_ADD_BUY_MAX_PROFIT` | `2.0` | 추가매수 허용 최대 수익률 (%). 고점 추격매수 방지 |
+| `STOCK_MAX_SLOTS_PER_TICKER` | `2` | 종목당 최대 슬롯 수 (추가매수 포함 상한) |
 
 > **VPS 배포 후**: VPS `.env`는 git 미추적이므로 `KIS_APP_KEY_SANDBOX`, `KIS_APP_SECRET_SANDBOX`, `KIS_ACCOUNT_NO_SANDBOX` (또는 REAL 세트) 6개 변수를 VPS에서 직접 추가해야 KIS 기능이 활성화됩니다.
 
@@ -123,6 +131,14 @@ logs/
 3. F&G 극단값 (≥80 또는 ≤20) — 시뮬 모드에서는 바이패스
 4. 시장 캐시 노후 (>180초)
 5. 진입 점수 < `BUY_SCORE_THRESHOLD` (12)
+
+**주식 매수 차단 게이트 (순서)**
+1. 장 외 시간 — `is_market_hours()` False 시 워커 비활성
+2. 매수 마감 시각(`STOCK_BUY_CLOSE_TIME`) 초과 — 시뮬 모드에서는 비활성
+3. 슬롯당 예산(`sim_krw / empty_slots`) 대비 종목 가격 초과
+4. 진입 점수 × 2.5 < `STOCK_BUY_SCORE_THRESHOLD` (12)
+5. 당일 매도 이력 — `_stock_sold_today`에 기록된 종목 당일 재진입 차단
+6. 당일 등락률 범위 초과 — `STOCK_ENTRY_CHANGE_MIN`(-3%) ~ `STOCK_ENTRY_CHANGE_MAX`(+2%) 벗어난 종목 차단
 
 **청산 우선순위 (Phase 1)**
 상장폐지 → 익절 → 손절 → 트레일링 스탑 → 매도 신호 → time-stop

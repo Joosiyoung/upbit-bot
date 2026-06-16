@@ -182,6 +182,10 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | `STOCK_BUY_CLOSE_TIME` | 15:20 | 신규 매수 마감 시각 |
 | `STOCK_ENTRY_CHANGE_MAX` | +2.0% | 당일 등락률 상한 — 갭업 추격 차단 |
 | `STOCK_ENTRY_CHANGE_MIN` | -3.0% | 당일 등락률 하한 — 폭락 종목 진입 차단 |
+| `STOCK_ADD_BUY_ENABLED` | True | 추가매수 활성화 여부 |
+| `STOCK_ADD_BUY_MIN_PROFIT` | 0.0% | 추가매수 허용 최소 수익률 — 손실 중 물타기 방지 |
+| `STOCK_ADD_BUY_MAX_PROFIT` | 2.0% | 추가매수 허용 최대 수익률 — 추격매수 방지 |
+| `STOCK_MAX_SLOTS_PER_TICKER` | 2 | 종목당 최대 슬롯 수 (추가매수 상한) |
 
 ## 매수 차단 게이트
 
@@ -237,10 +241,14 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 2026-06-15 | 인프라 | `.claude/agents/` 15개 git 추적 추가 — VPS Remote Control 에이전트 동기화 |
 | 2026-06-15 | 코인 | fix(trader): 쿨다운 만료 시 `consec_stoploss` 미리셋 버그 수정 (`_buy_block_reason_locked`) |
 | 2026-06-15 | 인프라 | qa 에이전트 코드 최적화 점검 롤 추가 (중복 API 호출·재연산·자료구조·파일 I/O hot path) |
+| 2026-06-16 | 주식 | fix(stock): 종목 가격 필터를 `sim_krw / empty_slots` 슬롯당 예산 기준으로 동적 계산 (STOCK_MAX_PRICE 고정값 대체) |
+| 2026-06-16 | 주식 | feat(stock): 추가매수 로직 — `STOCK_ADD_BUY_ENABLED`, `STOCK_MAX_SLOTS_PER_TICKER=2`, 0~2% 수익 구간 조건부 추가매수 |
+| 2026-06-16 | 주식 | feat(stock): 시뮬 모드에서 `buy_cutoff` 비활성화 (데이터 수집 목적), `_save_state()` 락 내 호출 (레이스컨디션 방지) |
 | 2026-06-16 | 주식 | 당일 재진입 쿨다운: `_stock_sold_today` — 익절/손절 후 당일 동일 종목 재진입 차단 |
 | 2026-06-16 | 주식 | 일봉 신호 캐시: `_get_daily_signal()` — KIS TR 99% 절감, 자정 자동 무효화 |
 | 2026-06-16 | 주식 | 당일 등락률 필터: `STOCK_ENTRY_CHANGE_MIN/MAX` — 갭업 추격·폭락 종목 진입 차단 |
 | 2026-06-16 | 주식 | 5분봉 타이밍 필터 보류 — 표본 50건 이상 축적 후 백테스트 비교 기반으로 재판단 예정 |
+| 2026-06-16 | 인프라 | feat(docs): daily-summarizer 에이전트 신설 — "오늘 작업한 내용 정리해놔" 트리거 시 CLAUDE.md·README.md 자동 업데이트 |
 
 ## VPS 인프라
 
