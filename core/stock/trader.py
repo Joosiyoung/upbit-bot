@@ -137,14 +137,7 @@ def start_stock_trading(budget_krw: float = 0.0) -> str:
         effective_budget = saved_krw
     else:
         if budget_krw <= 0:
-            from core.stock.kis_client import KisClient
-            client = KisClient(is_sandbox=config.KIS_IS_SANDBOX)
-            budget_krw = client.get_cash_balance()
-            if budget_krw <= 0:
-                return (
-                    "KIS 잔고 조회 실패 또는 주문가능현금 0원입니다. "
-                    "금액을 직접 입력하세요.\n예: /start_sim 1000000"
-                )
+            budget_krw = config.STOCK_SIM_BUDGET
         effective_budget = budget_krw
 
     with _stock_lock:
@@ -192,7 +185,7 @@ def build_stock_status_msg() -> str:
     ]
 
     if positions:
-        client = KisClient(is_sandbox=config.KIS_IS_SANDBOX)
+        client = KisClient()
         now_dt = datetime.now(_KST)
         lines.append("")
         for code, pos in positions.items():
@@ -315,7 +308,7 @@ def _get_daily_signal(client, code: str):
 
 def _stock_worker():
     from core.stock.kis_client import KisClient
-    from core.stock.universe import get_universe
+    from core.stock.universe import get_dynamic_universe
     from core.analysis import action_from_score
 
     close_h, close_m = (int(x) for x in config.STOCK_BUY_CLOSE_TIME.split(":"))
@@ -339,7 +332,7 @@ def _stock_worker():
                 time.sleep(30)
                 continue
 
-            client = KisClient(is_sandbox=config.KIS_IS_SANDBOX)
+            client = KisClient()
             now = datetime.now(_KST)
 
             # ── 청산 체크 ──
@@ -443,7 +436,9 @@ def _stock_worker():
                 held_codes = set(_stock_positions.keys())
 
             if not buy_cutoff and cur_positions < config.STOCK_MAX_POSITIONS:
-                universe = get_universe()
+                _empty = max(1, config.STOCK_MAX_POSITIONS - cur_positions)
+                _slot_budget = sim_krw / _empty
+                universe = get_dynamic_universe(client, _slot_budget, limit=30)
                 for code, name in universe:
                     with _stock_lock:
                         if not _stock_trading_state["enabled"]:

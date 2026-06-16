@@ -770,7 +770,7 @@ def _stock_cmd_positions() -> str:
         positions = dict(_stock_positions)
     if not positions:
         return "보유 포지션 없음"
-    client = KisClient(is_sandbox=_cfg.KIS_IS_SANDBOX)
+    client = KisClient()
     lines = [f"<b>보유 포지션 ({len(positions)}종목)</b>"]
     for code, pos in positions.items():
         name = html.escape(pos.get("name", code))

@@ -47,7 +47,7 @@ def fetch_daily(code: str, count: int) -> pd.DataFrame:
         sys.exit(1)
 
     from core.stock.kis_client import KisClient
-    client = KisClient(is_sandbox=config.KIS_IS_SANDBOX)
+    client = KisClient()
     try:
         return client.get_ohlcv(code, "day", count)
     except Exception as e:

@@ -170,3 +170,4 @@ STOCK_ADD_BUY_MAX_PROFIT    = float(os.getenv("STOCK_ADD_BUY_MAX_PROFIT", "2.0")
 STOCK_MAX_SLOTS_PER_TICKER  = int(os.getenv("STOCK_MAX_SLOTS_PER_TICKER", "2"))      # 종목당 최대 슬롯
 STOCK_ENTRY_CHANGE_MAX  = float(os.getenv("STOCK_ENTRY_CHANGE_MAX",  "2.0"))   # 당일 등락률 상한 (%)
 STOCK_ENTRY_CHANGE_MIN  = float(os.getenv("STOCK_ENTRY_CHANGE_MIN",  "-3.0"))  # 당일 등락률 하한 (%)
+STOCK_SIM_BUDGET = int(os.getenv("STOCK_SIM_BUDGET", "1000000"))  # 주식 시뮬 초기 예산 (KRW)

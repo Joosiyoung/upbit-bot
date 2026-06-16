@@ -214,7 +214,7 @@ def api_stock_status():
         positions_raw = dict(_stock_positions)
 
     from core.stock.kis_client import KisClient
-    client = KisClient(is_sandbox=config.KIS_IS_SANDBOX)
+    client = KisClient()
 
     positions_out = {}
     for code, pos in positions_raw.items():

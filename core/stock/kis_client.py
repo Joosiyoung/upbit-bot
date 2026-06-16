@@ -32,14 +32,14 @@ _MIN_FIELD_MAP = {
 
 
 class KisClient:
-    def __init__(self, is_sandbox: bool = True):
-        self._auth = KisAuth(config.KIS_APP_KEY, config.KIS_APP_SECRET, is_sandbox)
+    def __init__(self):
+        self._auth = KisAuth(config.KIS_APP_KEY_REAL, config.KIS_APP_SECRET_REAL, is_sandbox=False)
 
     def _headers(self, tr_id: str) -> dict:
         return {
             "authorization": f"Bearer {self._auth.get_token()}",
-            "appkey":        config.KIS_APP_KEY,
-            "appsecret":     config.KIS_APP_SECRET,
+            "appkey":        config.KIS_APP_KEY_REAL,
+            "appsecret":     config.KIS_APP_SECRET_REAL,
             "tr_id":         tr_id,
             "custtype":      "P",
             "Content-Type":  "application/json; charset=utf-8",
@@ -209,37 +209,6 @@ class KisClient:
 
     # ── 현재가 ────────────────────────────────────────────────────────────────
 
-    def get_cash_balance(self) -> float:
-        """주문가능현금 조회 (KRW). 실패 시 0.0 반환."""
-        acnt = config.KIS_ACCOUNT_NO
-        if "-" in acnt:
-            cano, prdt = acnt.split("-", 1)
-        else:
-            cano, prdt = acnt, "01"
-
-        tr_id = "VTTC8802R" if config.KIS_IS_SANDBOX else "TTTC8802R"
-        url = f"{self._auth.base_url}/uapi/domestic-stock/v1/trading/inquire-psbl-order"
-        params = {
-            "CANO":                  cano,
-            "ACNT_PRDT_CD":          prdt,
-            "PDNO":                  "005930",
-            "ORD_UNPR":              "0",
-            "ORD_DVSN":              "01",
-            "CMA_EVLU_AMT_ICLD_YN": "N",
-            "OVRS_ICLD_YN":          "N",
-        }
-        try:
-            resp = requests.get(url, headers=self._headers(tr_id), params=params, timeout=10)
-            resp.raise_for_status()
-            data = resp.json()
-            self._check_rt(data)
-            output = data.get("output") or {}
-            return float(output.get("ord_psbl_cash", 0) or 0)
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning("KIS 잔고 조회 실패: %s", e)
-            return 0.0
-
     def get_current_price(self, code: str) -> float | None:
         url = f"{self._auth.base_url}/uapi/domestic-stock/v1/quotations/inquire-price"
         params = {
@@ -258,3 +227,46 @@ class KisClient:
             import logging
             logging.getLogger(__name__).warning("KIS 현재가 조회 실패 (%s): %s", code, e)
             return None
+
+    def get_top_volume_stocks(self, limit: int = 60) -> list[tuple[str, str]]:
+        """KOSPI 거래량 순위 상위 종목 조회.
+
+        반환: [(종목코드, 종목명), ...] — limit개 이내
+        실패 시 빈 리스트 반환.
+        """
+        import logging
+        url = f"{self._auth.base_url}/uapi/domestic-stock/v1/ranking/volume"
+        params = {
+            "FID_COND_MRKT_DIV_CODE":  "J",
+            "FID_COND_SCR_DIV_CODE":   "20171",
+            "FID_INPUT_ISCD":           "0001",
+            "FID_DIV_CLS_CODE":        "0",
+            "FID_BLNG_CLS_CODE":       "0",
+            "FID_TRGT_CLS_CODE":       "111111111",
+            "FID_TRGT_EXLS_CLS_CODE":  "000000",
+            "FID_INPUT_PRICE_1":       "",
+            "FID_INPUT_PRICE_2":       "",
+            "FID_VOL_CNT":             "",
+            "FID_INPUT_DATE_1":        "",
+        }
+        try:
+            resp = requests.get(url, headers=self._headers("FHPST01710000"),
+                                params=params, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("rt_cd") != "0":
+                logging.getLogger(__name__).warning(
+                    "KIS 거래량 순위 API 오류: %s", data.get("msg1", "")
+                )
+                return []
+            output = data.get("output") or []
+            result = []
+            for item in output[:limit]:
+                code = item.get("mksc_shrn_iscd", "").strip()
+                name = item.get("hts_kor_isnm", "").strip()
+                if code and name:
+                    result.append((code, name))
+            return result
+        except Exception as e:
+            logging.getLogger(__name__).warning("KIS 거래량 순위 조회 실패: %s", e)
+            return []
