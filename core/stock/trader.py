@@ -200,14 +200,14 @@ def build_stock_status_msg() -> str:
             entry_price = pos.get("entry_price", 0)
             entry_time = pos.get("entry_time")
 
-            try:
-                current_price = client.get_current_price(code)
-            except Exception:
+            current_price = client.get_current_price(code)
+            price_fallback = not current_price
+            if not current_price:
                 current_price = entry_price
 
             if current_price and entry_price:
                 ret = (current_price * (1 - FEE_RATE) - entry_price * (1 + FEE_RATE)) / (entry_price * (1 + FEE_RATE)) * 100
-                pct_str = f"{ret:+.2f}%"
+                pct_str = f"{ret:+.2f}%" + ("(진입가)" if price_fallback else "")
             else:
                 pct_str = "조회 불가"
 
@@ -346,6 +346,11 @@ def _stock_worker():
             with _stock_lock:
                 codes_to_check = list(_stock_positions.keys())
 
+            # 사이클 시작 시 보유 종목 현재가 일괄 조회 (중복 호출 방지)
+            _price_cache: dict[str, float | None] = {}
+            for _c in codes_to_check:
+                _price_cache[_c] = client.get_current_price(_c)
+
             for code in codes_to_check:
                 with _stock_lock:
                     if not _stock_trading_state["enabled"]:
@@ -354,9 +359,8 @@ def _stock_worker():
                     if pos is None:
                         continue
 
-                try:
-                    current_price = client.get_current_price(code)
-                except Exception:
+                current_price = _price_cache.get(code)
+                if not current_price:
                     logging.warning("주식 현재가 조회 실패: %s", code)
                     continue
 
@@ -447,12 +451,13 @@ def _stock_worker():
                         cur_positions = len(_stock_positions)
                         sim_krw = _stock_trading_state["sim_krw"]
                         held_codes = set(_stock_positions.keys())
+                        sold_today_code = _stock_sold_today.get(code)
 
                     if cur_positions >= config.STOCK_MAX_POSITIONS:
                         break
                     if code in held_codes:
                         continue
-                    if _stock_sold_today.get(code) == now.date():
+                    if sold_today_code == now.date():
                         continue  # 당일 매도 종목 재진입 차단
 
                     result = _get_daily_signal(client, code)
@@ -556,16 +561,17 @@ def _stock_worker():
                                 continue
                             last_ts = entry_time_val.isoformat() if hasattr(entry_time_val, "isoformat") else str(entry_time_val)
                         try:
-                            last_dt = datetime.fromisoformat(last_ts).astimezone(_KST)
+                            last_dt = datetime.fromisoformat(last_ts)
+                            if last_dt.tzinfo is None:
+                                last_dt = last_dt.replace(tzinfo=_KST)
+                            else:
+                                last_dt = last_dt.astimezone(_KST)
                         except Exception:
                             continue
                         if (now - last_dt) < timedelta(days=1):
                             continue
-                        # 현재가 조회
-                        try:
-                            current_price = client.get_current_price(code)
-                        except Exception:
-                            continue
+                        # 현재가 조회 (사이클 캐시 우선, 없으면 신규 조회)
+                        current_price = _price_cache.get(code) or client.get_current_price(code)
                         if not current_price:
                             continue
                         # 수익률 계산
@@ -601,11 +607,12 @@ def _stock_worker():
                                 continue
                             p = _stock_positions[code]
                             name_add = p.get("name", code)
-                            new_qty = p["quantity"] + quantity
-                            new_amt = p["amount_krw"] + cost if "amount_krw" in p else p["entry_price"] * p["quantity"] * (1 + FEE_RATE) + cost
-                            p["entry_price"] = new_amt / new_qty
+                            old_qty = p["quantity"]
+                            old_entry = p["entry_price"]
+                            new_qty = old_qty + quantity
+                            # 순수 가격 기준 가중평균 (수수료 미포함) — 청산 시 entry_price * (1+FEE_RATE) 에서 한 번만 반영
+                            p["entry_price"] = (old_entry * old_qty + current_price * quantity) / new_qty
                             p["quantity"] = new_qty
-                            p["amount_krw"] = new_amt
                             p["slot_count"] = p.get("slot_count", 1) + 1
                             p["last_add_ts"] = now.isoformat()
                             p["peak"] = max(p.get("peak", 0), current_price)
