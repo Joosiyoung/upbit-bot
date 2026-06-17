@@ -104,16 +104,9 @@ def start_workers():
         t = threading.Thread(target=_stock_worker, daemon=True, name="stock-worker")
         t.start()
 
-    # ── 미국주식 상태 복원 ──────────────────────────────────────────────────────
-    try:
-        import core.stock.us_trader as _us_mod
-        _us_mod._load_us_state()
-        if _us_mod._us_running:
-            _us_t = threading.Thread(target=_us_mod._us_worker, daemon=True, name="us-stock-worker")
-            _us_t.start()
-            logging.info("미국주식 워커 재기동 (이전 실행 상태 복원)")
-    except Exception as _e:
-        logging.warning("미국주식 상태 복원 실패: %s", _e)
+    # 국내주식 장 시작(09:00) 알림 데몬 — 시뮬 상태와 무관하게 항상 동작
+    from core.stock.trader import _stock_market_notifier
+    threading.Thread(target=_stock_market_notifier, daemon=True, name="stock-market-notifier").start()
 
 # ─────────────────────────────────────────────
 # 라우트
@@ -327,38 +320,6 @@ def api_stock_performance():
         "today_sells":   today_sells,
         "today_ret_sum": today_ret_sum,
     })
-
-
-# ─────────────────────────────────────────────
-# 미국주식 봇 라우트
-# ─────────────────────────────────────────────
-
-@app.route('/api/us/status')
-def api_us_status():
-    from core.stock.us_trader import get_us_status
-    return jsonify(get_us_status())
-
-
-@app.route('/api/us/start', methods=['POST'])
-@_require_auth
-def api_us_start():
-    from core.stock.us_trader import start_us_sim
-    data = request.get_json(silent=True) or {}
-    budget = data.get("budget")
-    try:
-        budget = float(budget) if budget else None
-    except (ValueError, TypeError):
-        budget = None
-    result = start_us_sim(budget)
-    return jsonify(result), (200 if result.get("ok") else 409)
-
-
-@app.route('/api/us/stop', methods=['POST'])
-@_require_auth
-def api_us_stop():
-    from core.stock.us_trader import stop_us
-    result = stop_us()
-    return jsonify(result)
 
 
 @app.route('/api/trading/status')

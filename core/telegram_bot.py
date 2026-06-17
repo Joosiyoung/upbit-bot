@@ -632,59 +632,49 @@ def _daily_report_worker():
 # ─────────────────────────────────────────────
 
 _STOCK_HELP_TEXT = (
-    "<b>[미국주식 봇] 명령어</b>\n\n"
-    "/us_start_sim [금액] — 미국주식 시뮬 시작 (원화, 생략 시 기본값 100만원)\n"
-    "/us_stop — 미국주식 시뮬 중지\n"
-    "/us_status — 미국주식 현황·잔고·포지션\n"
-    "/us_perf — 누적 성과 (승률·평균수익률)\n"
-    "/us_history [n] — 최근 거래 이력 (기본 10, 최대 50)\n"
-    "/us_params — 현재 파라미터 조회\n"
-    "/us_universe — 현재 유니버스 종목 리스트\n"
-    "/us_market — 미국장 시간 상태\n"
+    "<b>[국내주식 봇] 명령어</b>\n\n"
+    "/start_sim [금액] — 주식 시뮬 시작 (원화, 생략 시 기본값 100만원)\n"
+    "/stop — 주식 시뮬 중지\n"
+    "/status — 현황·잔고·포지션\n"
+    "/perf — 누적 성과 (승률·평균수익률)\n"
+    "/positions — 보유 포지션 상세\n"
+    "/history [n] — 최근 거래 이력 (기본 10, 최대 50)\n"
+    "/params — 현재 파라미터 조회\n"
+    "/market — 장중/장외 상태 확인\n"
     "/help — 이 도움말"
 )
 
 _STOCK_BOT_COMMANDS = [
-    # ── 국내주식 명령 비활성 ──
-    # {"command": "status",       "description": "시뮬 상태·잔고·포지션 요약"},
-    # {"command": "perf",         "description": "누적 성과 (승률·손익)"},
-    # {"command": "positions",    "description": "보유 포지션 상세"},
-    # {"command": "history",      "description": "최근 거래 이력 [n]"},
-    # {"command": "params",       "description": "현재 파라미터 조회"},
-    # {"command": "market",       "description": "장중/장외 상태 확인"},
-    # {"command": "start_sim",    "description": "주식 시뮬 시작 [예산]"},
-    # {"command": "start_live",   "description": "실거래 시작 (미지원)"},
-    # {"command": "stop",         "description": "주식 시뮬 중지"},
-    {"command": "us_start_sim", "description": "미국주식 시뮬 시작 [원화예산]"},
-    {"command": "us_stop",      "description": "미국주식 시뮬 중지"},
-    {"command": "us_status",    "description": "미국주식 현황·잔고·포지션"},
-    {"command": "us_perf",      "description": "누적 성과 (승률·평균수익률)"},
-    {"command": "us_history",   "description": "최근 거래 이력 [n]"},
-    {"command": "us_params",    "description": "현재 파라미터 조회"},
-    {"command": "us_universe",  "description": "유니버스 종목 리스트"},
-    {"command": "us_market",    "description": "미국장 시간 상태"},
+    {"command": "start_sim",    "description": "주식 시뮬 시작 [예산]"},
+    {"command": "stop",         "description": "주식 시뮬 중지"},
+    {"command": "status",       "description": "시뮬 상태·잔고·포지션 요약"},
+    {"command": "perf",         "description": "누적 성과 (승률·손익)"},
+    {"command": "positions",    "description": "보유 포지션 상세"},
+    {"command": "history",      "description": "최근 거래 이력 [n]"},
+    {"command": "params",       "description": "현재 파라미터 조회"},
+    {"command": "market",       "description": "장중/장외 상태 확인"},
     {"command": "help",         "description": "도움말"},
 ]
 
 _STOCK_REPLY_KEYBOARD = {
     "keyboard": [
-        ["🇺🇸 시작", "⏹ 중지", "📊 현황"],
+        ["▶️ 시작", "⏹ 중지", "📊 현황"],
         ["📈 성과", "📋 이력", "⚙️ 파라미터"],
-        ["🌐 유니버스", "🕐 장 상태", "❓ 도움말"],
+        ["📦 포지션", "🕐 장 상태", "❓ 도움말"],
     ],
     "resize_keyboard": True,
     "persistent": True,
 }
 
 _STOCK_BUTTON_MAP = {
-    "🇺🇸 시작":    "/us_start_sim",
-    "⏹ 중지":      "/us_stop",
-    "📊 현황":      "/us_status",
-    "📈 성과":      "/us_perf",
-    "📋 이력":      "/us_history",
-    "⚙️ 파라미터":  "/us_params",
-    "🌐 유니버스":  "/us_universe",
-    "🕐 장 상태":   "/us_market",
+    "▶️ 시작":     "/start_sim",
+    "⏹ 중지":      "/stop",
+    "📊 현황":      "/status",
+    "📈 성과":      "/perf",
+    "📋 이력":      "/history",
+    "⚙️ 파라미터":  "/params",
+    "📦 포지션":    "/positions",
+    "🕐 장 상태":   "/market",
     "❓ 도움말":    "/help",
 }
 
@@ -927,150 +917,6 @@ def _stock_cmd_market() -> str:
         )
 
 
-def _us_cmd_perf() -> str:
-    import json as _json
-    import os as _os
-    log_file = _os.path.join("data", "us_stock_trade_history.jsonl")
-    total, wins, rets = 0, 0, []
-    if _os.path.exists(log_file):
-        with open(log_file, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = _json.loads(line)
-                except Exception:
-                    continue
-                if rec.get("side") != "sell":
-                    continue
-                r = rec.get("ret_pct")
-                if r is None:
-                    continue
-                total += 1
-                rets.append(r)
-                if r > 0:
-                    wins += 1
-    if total == 0:
-        return "아직 청산 거래 이력이 없습니다."
-    win_rate = wins / total * 100
-    avg_ret  = sum(rets) / len(rets)
-    return "\n".join([
-        "<b>🇺🇸 미국주식 시뮬 누적 성과</b>",
-        f"거래: {total}건 · 승률: {win_rate:.0f}%",
-        f"평균수익률: {avg_ret:+.2f}%",
-        f"최고: {max(rets):+.2f}% · 최악: {min(rets):+.2f}%",
-    ])
-
-
-def _us_cmd_history(n: int) -> str:
-    import json as _json
-    import os as _os
-    log_file = _os.path.join("data", "us_stock_trade_history.jsonl")
-    if not _os.path.exists(log_file):
-        return "거래 이력 없음"
-    records = []
-    with open(log_file, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                try:
-                    records.append(_json.loads(line))
-                except Exception:
-                    pass
-    if not records:
-        return "거래 이력 없음"
-    recent = records[-n:][::-1]
-    lines = [f"<b>🇺🇸 최근 거래 이력 ({len(recent)}건)</b>"]
-    for rec in recent:
-        side   = "매수" if rec.get("side") == "buy" else "매도"
-        name   = html.escape(rec.get("name", rec.get("symbol", "?")))
-        symbol = html.escape(rec.get("symbol", ""))
-        ts     = rec.get("ts", "")[:16].replace("T", " ")
-        r      = rec.get("ret_pct")
-        pct_str = f" {r:+.2f}%" if r is not None else ""
-        price  = rec.get("price", "")
-        p_str  = f" ${price}" if price else ""
-        lines.append(f"{ts} [{side}] {name}({symbol}){pct_str}{p_str}")
-    return "\n".join(lines)
-
-
-def _us_cmd_params() -> str:
-    from core import config as _cfg
-    return "\n".join([
-        "<b>🇺🇸 미국주식 파라미터</b>",
-        f"US_BUY_SCORE_THRESHOLD: {_cfg.US_BUY_SCORE_THRESHOLD}",
-        f"US_MAX_POSITIONS: {_cfg.US_MAX_POSITIONS}",
-        f"US_SIM_BUDGET: ₩{_cfg.US_SIM_BUDGET:,.0f}",
-        f"US_MAX_LOSS_PERCENT: {_cfg.US_MAX_LOSS_PERCENT}%",
-        f"US_TAKE_PROFIT_PERCENT: {_cfg.US_TAKE_PROFIT_PERCENT}%",
-        f"US_TRAILING_START_PCT: {_cfg.US_TRAILING_START_PCT}%",
-        f"US_TRAILING_STOP_PCT: {_cfg.US_TRAILING_STOP_PCT}%",
-        f"US_MAX_HOLD_DAYS: {_cfg.US_MAX_HOLD_DAYS}일",
-        f"US_FEE_RATE: {_cfg.US_FEE_RATE * 100:.2f}%",
-        f"진입등락폭: {_cfg.US_ENTRY_CHANGE_MIN}% ~ {_cfg.US_ENTRY_CHANGE_MAX}%",
-    ])
-
-
-def _us_cmd_universe() -> str:
-    import core.stock.us_universe as _usu
-    with _usu._lock:
-        universe  = list(_usu._cached_universe) if _usu._cached_universe else list(_usu._FALLBACK_UNIVERSE)
-        cache_date = _usu._cache_date
-
-    if not universe:
-        return "유니버스 데이터 없음"
-
-    if cache_date:
-        d = cache_date
-        source = f"📅 {d[:4]}-{d[4:6]}-{d[6:]} KIS 거래량순위 기준"
-    else:
-        source = "⚠️ fallback 고정 리스트 (아직 갱신 전)"
-
-    nas = [(sym, name) for sym, name, excd in universe if excd == "NAS"]
-    nys = [(sym, name) for sym, name, excd in universe if excd == "NYS"]
-    lines = [f"<b>🌐 미국주식 유니버스</b> ({len(universe)}종목)\n{source}"]
-    if nas:
-        lines.append(f"\n<b>NASDAQ ({len(nas)})</b>")
-        for sym, name in nas[:25]:
-            lines.append(f"  {html.escape(sym)} — {html.escape(name)}")
-    if nys:
-        lines.append(f"\n<b>NYSE ({len(nys)})</b>")
-        for sym, name in nys[:25]:
-            lines.append(f"  {html.escape(sym)} — {html.escape(name)}")
-    return "\n".join(lines)
-
-
-def _us_cmd_market() -> str:
-    from core.stock.us_trader import is_us_market_hours
-    now = datetime.now(_KST)
-    weekday_ko = ["월", "화", "수", "목", "금", "토", "일"]
-    dow  = weekday_ko[now.weekday()]
-    ts   = now.strftime("%H:%M")
-    if is_us_market_hours():
-        # 마감 KST 05:00 계산
-        close = now.replace(hour=5, minute=0, second=0, microsecond=0)
-        if now.hour >= 5:
-            close += timedelta(days=1)
-        remain = close - now
-        h, m = divmod(int(remain.total_seconds() // 60), 60)
-        return (
-            f"<b>🟢 미국장 중</b> — {now.strftime('%m/%d')}({dow}) {ts}\n"
-            f"마감(KST 05:00)까지 {h}시간 {m}분"
-        )
-    # 다음 개장 KST 22:30 계산
-    nxt = now.replace(hour=22, minute=30, second=0, microsecond=0)
-    if now >= nxt:
-        nxt += timedelta(days=1)
-    while nxt.weekday() >= 5:
-        nxt += timedelta(days=1)
-    remain = nxt - now
-    h, m = divmod(int(remain.total_seconds() // 60), 60)
-    nxt_dow = weekday_ko[nxt.weekday()]
-    return (
-        f"<b>🔴 미국장 외</b> — {now.strftime('%m/%d')}({dow}) {ts}\n"
-        f"다음 개장: {nxt.strftime('%m/%d')}({nxt_dow}) 22:30 ({h}시간 {m}분 후)"
-    )
 
 
 def _handle_stock_command(cmd: str, arg: str | None = None):
@@ -1080,104 +926,29 @@ def _handle_stock_command(cmd: str, arg: str | None = None):
     if cmd in ("/start", "/help"):
         _send_stock_with_keyboard(_STOCK_HELP_TEXT)
 
-    # ── 국내주식 명령 비활성 (미국주식 전용 운영) ──
-    # elif cmd == "/status":
-    #     try:
-    #         from core.stock.trader import build_stock_status_msg
-    #         reply(build_stock_status_msg())
-    #     except Exception as e:
-    #         logging.exception("Telegram(주식) /status 처리 오류")
-    #         reply(f"⚠️ 상태 조회 오류: {html.escape(str(e)[:100])}")
-
-    # elif cmd == "/perf":
-    #     try:
-    #         reply(_stock_cmd_perf())
-    #     except Exception as e:
-    #         logging.exception("Telegram(주식) /perf 처리 오류")
-    #         reply(f"⚠️ 성과 조회 오류: {html.escape(str(e)[:100])}")
-
-    # elif cmd == "/positions":
-    #     try:
-    #         reply(_stock_cmd_positions())
-    #     except Exception as e:
-    #         logging.exception("Telegram(주식) /positions 처리 오류")
-    #         reply(f"⚠️ 포지션 조회 오류: {html.escape(str(e)[:100])}")
-
-    # elif cmd == "/history":
-    #     try:
-    #         n = 10
-    #         if arg:
-    #             try:
-    #                 n = max(1, min(50, int(arg.strip())))
-    #             except ValueError:
-    #                 pass
-    #         reply(_stock_cmd_history(n))
-    #     except Exception as e:
-    #         logging.exception("Telegram(주식) /history 처리 오류")
-    #         reply(f"⚠️ 이력 조회 오류: {html.escape(str(e)[:100])}")
-
-    # elif cmd == "/params":
-    #     try:
-    #         reply(_stock_cmd_params())
-    #     except Exception as e:
-    #         logging.exception("Telegram(주식) /params 처리 오류")
-    #         reply(f"⚠️ 파라미터 조회 오류: {html.escape(str(e)[:100])}")
-
-    # elif cmd == "/market":
-    #     try:
-    #         reply(_stock_cmd_market())
-    #     except Exception as e:
-    #         logging.exception("Telegram(주식) /market 처리 오류")
-    #         reply(f"⚠️ 장중 상태 조회 오류: {html.escape(str(e)[:100])}")
-
-    # elif cmd == "/start_sim":
-    #     from core.stock.trader import _stock_trading_state, _stock_lock, start_stock_trading
-    #     with _stock_lock:
-    #         _enabled = _stock_trading_state["enabled"]
-    #     if _enabled:
-    #         reply("이미 주식 시뮬 매매가 실행 중입니다. /stop 으로 중지하세요.")
-    #     elif arg:
-    #         raw = arg.strip().replace(",", "").replace("원", "")
-    #         try:
-    #             budget = float(raw)
-    #         except ValueError:
-    #             reply("⚠️ 금액이 올바르지 않습니다. 예: /start_sim 1000000")
-    #             return
-    #         if budget <= 0:
-    #             reply("⚠️ 예산은 0보다 커야 합니다.")
-    #             return
-    #         result = start_stock_trading(budget)
-    #         reply(result)
-    #     else:
-    #         result = start_stock_trading()
-    #         reply(result)
-
-    # elif cmd == "/start_live":
-    #     reply(
-    #         "🚧 <b>주식 실거래는 아직 지원하지 않습니다.</b>\n"
-    #         "현재는 시뮬레이션 모드만 사용할 수 있습니다.\n"
-    #         "/start_sim 으로 시뮬을 시작하세요."
-    #     )
-
-    # elif cmd == "/risk":
-    #     reply(
-    #         "🚧 <b>주식 봇 리스크 트래킹은 아직 구현 중입니다.</b>\n"
-    #         "일일 손실 한도·연속 손절 추적 기능이 추가될 예정입니다."
-    #     )
-
-    # elif cmd == "/stop":
-    #     from core.stock.trader import stop_stock_trading
-    #     result = stop_stock_trading()
-    #     reply(result)
-
-    elif cmd == "/us_perf":
+    elif cmd == "/status":
         try:
-            reply(_us_cmd_perf())
+            from core.stock.trader import build_stock_status_msg
+            reply(build_stock_status_msg())
         except Exception as e:
-            logging.exception("Telegram(주식) /us_perf 처리 오류")
+            logging.exception("Telegram(주식) /status 처리 오류")
+            reply(f"⚠️ 상태 조회 오류: {html.escape(str(e)[:100])}")
+
+    elif cmd == "/perf":
+        try:
+            reply(_stock_cmd_perf())
+        except Exception as e:
+            logging.exception("Telegram(주식) /perf 처리 오류")
             reply(f"⚠️ 성과 조회 오류: {html.escape(str(e)[:100])}")
 
-    elif cmd == "/us_history":
+    elif cmd == "/positions":
+        try:
+            reply(_stock_cmd_positions())
+        except Exception as e:
+            logging.exception("Telegram(주식) /positions 처리 오류")
+            reply(f"⚠️ 포지션 조회 오류: {html.escape(str(e)[:100])}")
+
+    elif cmd == "/history":
         try:
             n = 10
             if arg:
@@ -1185,66 +956,58 @@ def _handle_stock_command(cmd: str, arg: str | None = None):
                     n = max(1, min(50, int(arg.strip())))
                 except ValueError:
                     pass
-            reply(_us_cmd_history(n))
+            reply(_stock_cmd_history(n))
         except Exception as e:
-            logging.exception("Telegram(주식) /us_history 처리 오류")
+            logging.exception("Telegram(주식) /history 처리 오류")
             reply(f"⚠️ 이력 조회 오류: {html.escape(str(e)[:100])}")
 
-    elif cmd == "/us_params":
+    elif cmd == "/params":
         try:
-            reply(_us_cmd_params())
+            reply(_stock_cmd_params())
         except Exception as e:
-            logging.exception("Telegram(주식) /us_params 처리 오류")
+            logging.exception("Telegram(주식) /params 처리 오류")
             reply(f"⚠️ 파라미터 조회 오류: {html.escape(str(e)[:100])}")
 
-    elif cmd == "/us_universe":
+    elif cmd == "/market":
         try:
-            reply(_us_cmd_universe())
+            reply(_stock_cmd_market())
         except Exception as e:
-            logging.exception("Telegram(주식) /us_universe 처리 오류")
-            reply(f"⚠️ 유니버스 조회 오류: {html.escape(str(e)[:100])}")
+            logging.exception("Telegram(주식) /market 처리 오류")
+            reply(f"⚠️ 장중 상태 조회 오류: {html.escape(str(e)[:100])}")
 
-    elif cmd == "/us_market":
-        try:
-            reply(_us_cmd_market())
-        except Exception as e:
-            logging.exception("Telegram(주식) /us_market 처리 오류")
-            reply(f"⚠️ 장 상태 조회 오류: {html.escape(str(e)[:100])}")
-
-    elif cmd == "/us_start_sim":
-        import core.stock.us_trader as _us_mod
-        from core.stock.us_trader import start_us_sim
-        with _us_mod._us_lock:
-            running = _us_mod._us_running
-        if running:
-            reply("이미 미국주식 시뮬이 실행 중입니다. /us_stop 으로 중지하세요.")
+    elif cmd == "/start_sim":
+        from core.stock.trader import _stock_trading_state, _stock_lock, start_stock_trading
+        with _stock_lock:
+            _enabled = _stock_trading_state["enabled"]
+        if _enabled:
+            reply("이미 주식 시뮬 매매가 실행 중입니다. /stop 으로 중지하세요.")
+        elif arg:
+            raw = arg.strip().replace(",", "").replace("원", "")
+            try:
+                budget = float(raw)
+            except ValueError:
+                reply("⚠️ 금액이 올바르지 않습니다. 예: /start_sim 1000000")
+                return
+            if budget <= 0:
+                reply("⚠️ 예산은 0보다 커야 합니다.")
+                return
+            result = start_stock_trading(budget)
+            reply(result)
         else:
-            budget = None
-            if arg:
-                raw = arg.strip().lstrip("$").replace(",", "")
-                try:
-                    budget = float(raw)
-                except ValueError:
-                    reply("⚠️ 금액이 올바르지 않습니다. 예: /us_start_sim 1000")
-                    return
-                if budget <= 0:
-                    reply("⚠️ 예산은 0보다 커야 합니다.")
-                    return
-            result = start_us_sim(budget)
-            reply(result.get("msg", "시작 실패"))
+            result = start_stock_trading()
+            reply(result)
 
-    elif cmd == "/us_stop":
-        from core.stock.us_trader import stop_us
-        result = stop_us()
-        reply(result.get("msg", "중지됨"))
+    elif cmd == "/start_live":
+        reply(
+            "🚧 <b>주식 실거래는 아직 지원하지 않습니다.</b>\n"
+            "현재는 시뮬레이션 모드만 사용할 수 있습니다.\n"
+            "/start_sim 으로 시뮬을 시작하세요."
+        )
 
-    elif cmd == "/us_status":
-        try:
-            from core.stock.us_trader import build_us_status_msg
-            reply(build_us_status_msg())
-        except Exception as e:
-            logging.exception("Telegram(주식) /us_status 처리 오류")
-            reply(f"⚠️ 미국주식 상태 조회 오류: {html.escape(str(e)[:100])}")
+    elif cmd == "/stop":
+        from core.stock.trader import stop_stock_trading
+        result = stop_stock_trading()
+        reply(result)
 
     else:
         reply(f"알 수 없는 명령: {html.escape(cmd)}\n/help 로 명령어를 확인하세요.")
