@@ -31,20 +31,19 @@ git push origin main
 ```
 실패 시 즉시 중단하고 에러 메시지를 그대로 보고한다.
 
-### Step 3 — VPS pull + 재시작
+### Step 3 — 서비스 재시작
+Claude Code가 VPS 위에서 직접 실행 중이므로 SSH 없이 직접 재시작한다.
 ```bash
-ssh -i "C:\Users\jso84\.ssh\upbit-vps-key" ubuntu@217.142.228.247 \
-  "cd /home/ubuntu/upbit-bot && git pull && sudo systemctl restart upbit-bot"
+sudo systemctl restart upbit-bot
 ```
 실패 시 즉시 중단. Step 2(push)는 됐으므로 다음 롤백 방법을 안내한다:
 ```
-롤백: VPS에서 git revert <커밋해시> 또는 git checkout <이전커밋> 후 systemctl restart
+롤백: git revert HEAD --no-edit && sudo systemctl restart upbit-bot
 ```
 
-### Step 4 — 헬스체크 (5초 대기 후)
+### Step 4 — 헬스체크 (10초 대기 후)
 ```bash
-ssh -i "C:\Users\jso84\.ssh\upbit-vps-key" ubuntu@217.142.228.247 \
-  "sleep 5 && systemctl is-active upbit-bot && sudo journalctl -u upbit-bot -n 20 --no-pager"
+sleep 10 && systemctl is-active upbit-bot && sudo journalctl -u upbit-bot -n 20 --no-pager
 ```
 - `is-active` = `active` → 정상
 - `is-active` != `active` (failed / activating 등) → 배포 실패로 판정
@@ -83,5 +82,5 @@ git log --oneline -1
 
 - 각 Step은 순서대로 실행한다. 하나라도 실패하면 다음 Step으로 넘어가지 않는다.
 - 헬스체크 실패 시 절대 재시도하지 않는다 — 즉시 중단하고 사용자가 수동으로 판단하도록 한다.
-- SSH 키 경로·VPS IP는 하드코딩된 값을 사용한다 (`C:\Users\jso84\.ssh\upbit-vps-key`, `217.142.228.247`).
+- Claude Code는 VPS 위에서 직접 실행 중이므로 SSH 없이 `sudo systemctl` 직접 호출한다.
 - 배포 중 어떤 코드 수정도 하지 않는다.

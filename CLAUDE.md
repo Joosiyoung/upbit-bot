@@ -15,14 +15,21 @@ python scripts/stock_backtest.py --days 90        # 주식 전체 (KIS 키 필�
 
 ## VPS 배포 절차
 
+Claude Code가 VPS 위에서 직접 실행 중이므로 SSH 없이 배포 가능.
+
+```bash
+git push origin main
+sudo systemctl restart upbit-bot
+
+# 로그 확인
+sudo journalctl -u upbit-bot -n 50 --no-pager
+```
+
+# 외부(로컬 PC)에서 배포 시
 ```bash
 git push origin main
 ssh -i "C:\Users\jso84\.ssh\upbit-vps-key" ubuntu@217.142.228.247 \
   "cd /home/ubuntu/upbit-bot && git pull && sudo systemctl restart upbit-bot"
-
-# 로그 확인
-ssh -i "C:\Users\jso84\.ssh\upbit-vps-key" ubuntu@217.142.228.247 \
-  "sudo journalctl -u upbit-bot -n 50 --no-pager"
 ```
 
 **주의**: 배포 전 반드시 사용자 승인("배포해") 필요. 자동 배포 금지.
@@ -124,7 +131,7 @@ core/
     trader.py           # 국내 주식 시뮬 매매 로직 + _stock_market_notifier(장 시작 알림 데몬)
     trading_control.py  # 국내 주식 시작/중지/상태 (Flask ↔ Telegram 공용)
     us_trader.py        # 미국주식 시뮬 매매 로직 (KRW 예산·환율·소수점 거래)
-    us_universe.py      # 미국주식 유니버스 (NASDAQ/NYSE 주요 종목)
+    us_universe.py      # 미국주식 유니버스 (KIS 거래량순위 기반 동적, NAS+NYS 각 10종목, fallback 고정 19종목)
     kis_auth.py         # KIS OAuth2 토큰 관리
     kis_client.py       # KIS API 래퍼 (국내 OHLCV·현재가 + 해외 OHLCV·현재가·소수점 주문 + 환율 조회)
     universe.py         # 국내 매매 대상 종목 풀 (KOSPI 대형주 19종목, KB금융 제외)
@@ -254,7 +261,12 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 - **`US_FEE_RATE = 0.0125`** — KIS 원화결제 서비스 기준 편도 1.25% (환전 스프레드 1.0% + 매매수수료 0.25%). 왕복 약 2.5%. `US_DEFAULT_EXCHANGE_RATE=1380.0`은 첫 환율 조회 완전 실패 시에만 사용 (sticky cache 우선).
 - **`kis_client.get_usd_krw_rate()`** — `open.er-api.com` 1시간 캐시. 조회 실패 시 마지막 성공 환율 유지(sticky cache). 환율이 한 번도 조회되지 않은 상태에서 실패 시에만 `US_DEFAULT_EXCHANGE_RATE` 사용.
 - **Sheets "주식" 시트** — 재시작마다 `clear()` 후 `_US_STOCK_HEADERS` 18컬럼으로 초기화됨. 미국주식 거래 데이터만 누적. 국내주식 Sheets 로깅은 비활성(주석 처리).
-- **주식 봇 Telegram 명령** — 현재 4개만 활성 (`/us_start_sim`, `/us_stop`, `/us_status`, `/help`). 국내주식 명령은 `telegram_bot.py` `_handle_stock_command()`에 주석으로 보존. 복구 시 주석 해제.
+- **주식 봇 Telegram 명령** — 현재 9개 활성 (`/us_start_sim`, `/us_stop`, `/us_status`, `/us_perf`, `/us_history`, `/us_params`, `/us_universe`, `/us_market`, `/help`). 국내주식 명령은 `telegram_bot.py` `_handle_stock_command()`에 주석으로 보존. 복구 시 주석 해제.
+- **미국주식 동적 유니버스** — `us_universe.py`의 `get_us_universe(client)` 는 KIS TR `HHDFS76310010`으로 NAS/NYS 각 10종목(총 20종목) 조회 후 당일 캐시. fallback 캐시는 30분 TTL — 장 재개 시 빠르게 갱신됨. 완전 실패 시 고정 19종목으로 fallback.
+- **`/us_status` 현재가** — 포지션별 현재가는 워커가 매 사이클에 갱신하는 `last_price`를 우선 사용. `last_price` 없을 때만 KIS API 직접 조회. `/us_status` 호출 시 KIS 직렬 호출 제거됨.
+- **`_us_sold_today` 초기화 기준** — KST 자정(00:00)이 아닌 05:00(장마감 시각) 기준으로 초기화. 미국 장은 KST 22:30~05:00이므로 자정에 초기화하면 당일 매도 이력이 장 중 소실됨.
+- **`ret_pct_krw`** — 매도 시 KRW 기준 수익률 = `(매도가 × 매도환율 - 매수가 × 매수환율) / (매수가 × 매수환율) × 100`. USD 기준 수익률(`ret_pct`)과 병기. 환전 손익이 포함된 실질 원화 수익률.
+- **`_stock_market_notifier` 제거** — 미국주식 전용 운영으로 전환 후 `app.py`에서 국내주식 장 시작 알림 스레드 기동 코드를 제거. 국내주식 재활성화 시 `app.py` 스레드 기동 코드 복구 필요.
 
 ## 최근 변경 이력
 
@@ -294,6 +306,14 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 2026-06-16 | 미국주식 | feat(us-stock): 미국주식 시뮬 모듈 신규 구축 (`core/stock/us_trader.py`, `core/stock/us_universe.py`) — KRW 기준 예산, 편도 1.25% 수수료, 매수 시 환율 기록(`entry_exchange_rate`), JSONL+Sheets에 `EXCHANGE_RATE`/`AMOUNT_KRW` 컬럼 추가 |
 | 2026-06-16 | 인프라 | refactor(sheets/telegram): 국내주식 Sheets 로깅 비활성, 주식 봇 Telegram 명령 13개 → 4개 (`/us_start_sim`, `/us_stop`, `/us_status`, `/help`) — 미국주식 전용 운영 전환 |
 | 2026-06-16 | 인프라 | fix(sheets): "주식" 시트 재시작 시 `clear()` 후 `_US_STOCK_HEADERS` 18컬럼으로 재초기화, 테이블정의서 레이블 "주식" 통일 |
+| 2026-06-17 | 미국주식 | feat(us-stock): KIS 거래량순위 기반 동적 유니버스 (`HHDFS76310010`) — NAS/NYS 각 50종목 조회, 당일 캐시, fallback 19종목 고정 (`us_universe.py`, `kis_client.py`) |
+| 2026-06-17 | 미국주식 | fix(us-stock): 유니버스 스캔 대상 NAS+NYS 각 50→10 (총 20종목) — KIS OHLCV API 과부하 해소, MAX_POSITIONS=5 기준 충분 |
+| 2026-06-17 | 미국주식 | fix(us-stock): fallback 캐시 하루 고정→30분 TTL 변경 (`us_universe.py`), `/us_status` 포지션 현재가 워커 캐시 `last_price` 우선 사용 (KIS 직렬 호출 제거) |
+| 2026-06-17 | 미국주식 | fix(us-stock): KRW 기준 수익률(`ret_pct_krw`) 추가 — 매수·매도 환율 모두 반영, Telegram 알림 KRW%/USD% 병기, Sheets `PROFIT_PCT_KRW` 컬럼 추가 |
+| 2026-06-17 | 미국주식 | fix(us-stock): 장 외 시작 거부(`start_us_sim()` ok=False 반환), `_us_sold_today` 초기화 기준 KST 자정→05:00(장마감)으로 변경, `_load_us_state()` entry_time 파싱 실패 시 now() fallback |
+| 2026-06-17 | 인프라 | feat(telegram): 코인봇 `/universe` 추가 (스캔 코인 목록·점수), 미국주식봇 명령 4→9개 확장 (`/us_perf`, `/us_history`, `/us_params`, `/us_universe`, `/us_market`) |
+| 2026-06-17 | 인프라 | fix(telegram): `/us_start_sim` 장 외 시간 호출 시 '현재 장 외 시간, 개장 시 자동 시작' 안내 메시지 추가 |
+| 2026-06-17 | 인프라 | fix(app): 국내주식 장 시작 알림 스레드(`_stock_market_notifier`) 무조건 기동 코드 제거 — 미국주식 전용 운영 전환 반영 |
 
 ## VPS 인프라
 
