@@ -56,8 +56,8 @@ def refresh_us_universe(kis_client=None) -> list[tuple[str, str, str]]:
     today = datetime.now(_KST).strftime("%Y%m%d")
 
     try:
-        nas = kis_client.get_us_top_volume_stocks("NAS", limit=50, min_vol="4", min_prc="5")
-        nys = kis_client.get_us_top_volume_stocks("NYS", limit=50, min_vol="4", min_prc="5")
+        nas = kis_client.get_us_top_volume_stocks("NAS", limit=10, min_vol="4", min_prc="5")
+        nys = kis_client.get_us_top_volume_stocks("NYS", limit=10, min_vol="4", min_prc="5")
         combined = nas + nys
         if not combined:
             _log.warning("거래량순위 API 결과 없음 — fallback 유니버스로 당일 캐시")
