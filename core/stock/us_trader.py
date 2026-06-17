@@ -183,6 +183,7 @@ def _us_worker():
                     excd        = pos["excd"]
                     peak = max(peak, current_price)
                     _us_positions[symbol]["peak_price"] = peak
+                    _us_positions[symbol]["last_price"] = current_price  # status 조회용 캐시
 
                 profit_pct = (current_price * (1 - config.US_FEE_RATE) - entry_price * (1 + config.US_FEE_RATE)) / (entry_price * (1 + config.US_FEE_RATE)) * 100
                 peak_profit = (peak * (1 - config.US_FEE_RATE) - entry_price * (1 + config.US_FEE_RATE)) / (entry_price * (1 + config.US_FEE_RATE)) * 100
@@ -491,10 +492,7 @@ def build_us_status_msg() -> str:
     with _us_lock:
         running   = _us_running
         sim_krw   = _us_sim_krw
-        positions = dict(_us_positions)
-
-    from core.stock.kis_client import KisClient
-    client = KisClient()
+        positions = {sym: dict(pos) for sym, pos in _us_positions.items()}
 
     status_str = "실행 중" if running else "중지"
     lines = [
@@ -508,10 +506,16 @@ def build_us_status_msg() -> str:
         for symbol, pos in positions.items():
             name        = html.escape(pos.get("name", symbol))
             entry_price = pos.get("entry_price", 0)
-            price       = client.get_us_current_price(symbol, pos.get("excd", "NAS"))
-            price_fallback = not price
+
+            price = pos.get("last_price")           # 워커 캐시 우선
+            price_fallback = False
             if not price:
-                price = entry_price
+                from core.stock.kis_client import KisClient
+                client = KisClient()
+                price = client.get_us_current_price(symbol, pos.get("excd", "NAS"))
+                if not price:
+                    price = entry_price
+                    price_fallback = True
 
             if price and entry_price:
                 ret = (price * (1 - config.US_FEE_RATE) - entry_price * (1 + config.US_FEE_RATE)) / (entry_price * (1 + config.US_FEE_RATE)) * 100

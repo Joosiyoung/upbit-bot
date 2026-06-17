@@ -1,6 +1,7 @@
 # 미국주식 동적 유니버스 — KIS 거래량순위 기반, 장 외 시간에는 고정 fallback
 import logging
 import threading
+import time
 from datetime import datetime
 
 from core import config
@@ -34,11 +35,16 @@ _FALLBACK_UNIVERSE = [
 _lock = threading.Lock()
 _cached_universe: list[tuple[str, str, str]] = []
 _cache_date: str = ""   # "YYYYMMDD" — 당일 날짜와 다르면 재조회
+_cache_expires_at: float = 0.0  # fallback 캐시 만료 timestamp (30분 TTL)
 
 
 def _is_cache_valid() -> bool:
+    if not _cached_universe:
+        return False
     today = datetime.now(_KST).strftime("%Y%m%d")
-    return _cache_date == today and len(_cached_universe) > 0
+    if _cache_date == today:
+        return True  # 정상 캐시: 당일 유효
+    return time.time() < _cache_expires_at  # fallback 캐시: 30분 TTL
 
 
 def refresh_us_universe(kis_client=None) -> list[tuple[str, str, str]]:
@@ -47,7 +53,7 @@ def refresh_us_universe(kis_client=None) -> list[tuple[str, str, str]]:
     kis_client: KisClient 인스턴스 (None이면 fallback 반환, 캐시 갱신 없음)
     반환: [(symbol, name, excd), ...] 최대 100개
     """
-    global _cached_universe, _cache_date
+    global _cached_universe, _cache_date, _cache_expires_at
 
     if kis_client is None:
         _log.warning("KisClient 미전달 — fallback 유니버스 사용")
@@ -60,10 +66,11 @@ def refresh_us_universe(kis_client=None) -> list[tuple[str, str, str]]:
         nys = kis_client.get_us_top_volume_stocks("NYS", limit=10, min_vol="4", min_prc="5")
         combined = nas + nys
         if not combined:
-            _log.warning("거래량순위 API 결과 없음 — fallback 유니버스로 당일 캐시")
+            _log.warning("거래량순위 API 결과 없음 — fallback 유니버스로 30분 캐시")
             with _lock:
                 _cached_universe = list(_FALLBACK_UNIVERSE)
-                _cache_date = today
+                _cache_date = ""  # 오늘 날짜로 마킹 안 함 — 30분 TTL 적용
+                _cache_expires_at = time.time() + 1800
             return list(_FALLBACK_UNIVERSE)
 
         # 중복 심볼 제거 (순서 유지)
@@ -77,15 +84,17 @@ def refresh_us_universe(kis_client=None) -> list[tuple[str, str, str]]:
         with _lock:
             _cached_universe = deduped
             _cache_date = today
+            _cache_expires_at = 0.0  # 정상 캐시: TTL 불필요
 
         _log.info("미국주식 유니버스 갱신 완료: %d종목 (NAS %d + NYS %d)", len(deduped), len(nas), len(nys))
         return deduped
 
     except Exception as e:
-        _log.warning("유니버스 갱신 실패: %s — fallback으로 당일 캐시", e)
+        _log.warning("유니버스 갱신 실패: %s — fallback으로 30분 캐시", e)
         with _lock:
             _cached_universe = list(_FALLBACK_UNIVERSE)
-            _cache_date = today
+            _cache_date = ""  # 오늘 날짜로 마킹 안 함 — 30분 TTL 적용
+            _cache_expires_at = time.time() + 1800
         return list(_FALLBACK_UNIVERSE)
 
 
