@@ -236,6 +236,7 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 - **주식 봇 Telegram 명령** — 현재 9개 활성 (`/start_sim`, `/stop`, `/status`, `/perf`, `/positions`, `/history`, `/params`, `/market`, `/help`). 모두 국내주식 전용.
 - **트레일링 비활성 방식** — `STOCK_TRAILING_START_PCT=9999`로 트레일링 분기가 절대 발동하지 않게 설정만으로 OFF (trader.py 로직 무변경). 재활성화 시 값을 정상 범위(예: 3.0)로 되돌리면 됨.
 - **`_stock_market_notifier` 기동** — `app.py`에서 국내주식 장 시작(09:00) 알림 스레드 기동. 시뮬 상태와 무관하게 항상 동작.
+- **프로젝트 서브에이전트 미등록 가능성** — 일부 런타임 세션(예: VPS Remote Control)에서 `.claude/agents/`의 coder·tester·pm·deployer 등이 Agent 툴 `subagent_type`으로 로드되지 않을 수 있다(빌트인만 노출). 정의 파일·설정은 정상인데 세션 레벨 미등록 문제. `'coder' not found. Available agents: claude, ...` 에러로 나타남. 복구: 프로젝트 디렉터리에서 세션 재시작. 그래도 안 되면 메인이 coder→tester→pm→deployer 역할을 직접 대행(구현+구문/임포트/스모크 검사+체크리스트+배포)한다(2026-06-17 실제 발생).
 
 ## 최근 변경 이력
 
@@ -287,6 +288,7 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 2026-06-17 | 미국주식 | **refactor: 미국주식 전면 제거** — `us_trader.py`·`us_universe.py`·kis_client 해외 메서드·`US_*` config·`/api/us/*` 라우트·미국 Telegram 명령 9개 삭제 (수수료 구조상 수익 불가 확정) |
 | 2026-06-17 | 주식 | **국내 복귀** — `_stock_market_notifier` 기동 복구, 국내 Sheets 로깅 복구("주식" 시트 16컬럼), 주식봇 Telegram 국내 명령 9개 복구 |
 | 2026-06-17 | 주식 | **파라미터 재튜닝(KOSPI 3년 수익최대형)** — 손절 3→5%, 보유 5→20일, 트레일링 OFF(`STOCK_TRAILING_START_PCT=9999`), 익절 5% 유지 |
+| 2026-06-17 | 인프라 | 서브에이전트(`.claude/agents/`)가 이 세션 Agent 툴에 미등록 → coder/tester/pm/deployer 호출 불가. 정의·설정 정상, 세션 레벨 문제. 메인이 파이프라인 전 단계 직접 대행하여 배포 완료 (gotcha 추가) |
 
 ## VPS 인프라
 
