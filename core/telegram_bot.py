@@ -1231,10 +1231,7 @@ def _handle_stock_command(cmd: str, arg: str | None = None):
                     reply("⚠️ 예산은 0보다 커야 합니다.")
                     return
             result = start_us_sim(budget)
-            msg = result.get("msg", "시작 실패")
-            if result.get("ok") and not _us_mod.is_us_market_hours():
-                msg += "\n\n⚠️ 현재 장 외 시간입니다. 개장 시 자동으로 매매를 시작합니다.\n" + _us_cmd_market()
-            reply(msg)
+            reply(result.get("msg", "시작 실패"))
 
     elif cmd == "/us_stop":
         from core.stock.us_trader import stop_us

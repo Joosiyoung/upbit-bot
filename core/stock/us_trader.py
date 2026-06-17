@@ -16,6 +16,12 @@ _KST = config.KST
 US_STATE_FILE     = os.path.join("data", "us_stock_state.json")
 US_TRADE_LOG_FILE = os.path.join("data", "us_stock_trade_history.jsonl")
 
+
+def _us_session_key(dt: datetime) -> object:
+    """KST 05:00 기준 미국 거래 세션 식별자 (자정 초기화 버그 방지)."""
+    return (dt - timedelta(hours=5)).date()
+
+
 _us_running = False
 _us_positions: dict[str, dict] = {}   # {symbol: {excd, name, entry_price, qty, entry_time, peak_price, slots, entry_exchange_rate}}
 _us_sim_krw  = 0.0                    # KRW 기준 잔고
@@ -100,11 +106,17 @@ def _load_us_state():
         state = data.get("state", {})
         raw_pos = data.get("positions", {})
         for sym, p in raw_pos.items():
-            if p.get("entry_time"):
-                dt = datetime.fromisoformat(p["entry_time"])
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=_KST)
-                p["entry_time"] = dt
+            raw_et = p.get("entry_time")
+            if raw_et:
+                try:
+                    dt = datetime.fromisoformat(raw_et)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=_KST)
+                    p["entry_time"] = dt
+                except (ValueError, TypeError):
+                    p["entry_time"] = datetime.now(_KST)
+            else:
+                p["entry_time"] = datetime.now(_KST)
         with _us_lock:
             # 구버전(sim_usd) 호환: sim_krw 키 없으면 기본값 사용
             if "sim_krw" in state:
@@ -126,17 +138,17 @@ def _us_worker():
     global _us_running, _us_sold_today, _us_sim_krw
 
     client = KisClient()
-    last_clear_date = datetime.now(_KST).date()
+    last_session_key = _us_session_key(datetime.now(_KST))
 
     while _us_running:
         try:
             now = datetime.now(_KST)
 
-            # 자정 KST 지나면 당일 매도 이력 초기화
-            if now.date() != last_clear_date:
+            # 미국장 마감(KST 05:00) 경과 시 당일 매도 이력 초기화
+            if _us_session_key(now) != last_session_key:
                 with _us_lock:
                     _us_sold_today.clear()
-                last_clear_date = now.date()
+                last_session_key = _us_session_key(now)
 
             if not is_us_market_hours():
                 time.sleep(60)
@@ -379,15 +391,21 @@ def _us_worker():
 def start_us_sim(budget_krw: float | None = None) -> dict:
     global _us_running, _us_sim_krw
 
+    if not is_us_market_hours():
+        return {
+            "ok": False,
+            "msg": "⚠️ 현재 미국장 외 시간입니다.\n개장 시각은 /us_market 으로 확인하세요.",
+        }
+
     with _us_lock:
         if _us_running:
-            return {"ok": False, "error": "이미 미국주식 시뮬이 실행 중입니다."}
+            return {"ok": False, "msg": "이미 미국주식 시뮬이 실행 중입니다."}
 
     _load_us_state()
 
     with _us_lock:
         if _us_running:
-            return {"ok": False, "error": "이미 미국주식 시뮬이 실행 중입니다."}
+            return {"ok": False, "msg": "이미 미국주식 시뮬이 실행 중입니다."}
         has_positions = bool(_us_positions)
         if not has_positions:
             _us_sim_krw = budget_krw if (budget_krw and budget_krw > 0) else config.US_SIM_BUDGET
