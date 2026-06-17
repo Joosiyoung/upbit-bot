@@ -104,10 +104,6 @@ def start_workers():
         t = threading.Thread(target=_stock_worker, daemon=True, name="stock-worker")
         t.start()
 
-    from core.stock.trader import _stock_market_notifier
-    mn = threading.Thread(target=_stock_market_notifier, daemon=True, name="stock-market-notifier")
-    mn.start()
-
     # ── 미국주식 상태 복원 ──────────────────────────────────────────────────────
     try:
         import core.stock.us_trader as _us_mod
