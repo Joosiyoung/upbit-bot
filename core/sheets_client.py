@@ -20,7 +20,7 @@ _STOCK_HEADERS = [
 
 _US_STOCK_HEADERS = [
     "DATE", "TIME", "TYPE", "SYMBOL", "NAME", "EXCHANGE", "PRICE_USD", "QTY",
-    "AMOUNT_USD", "EXCHANGE_RATE", "AMOUNT_KRW", "PROFIT_PCT", "THRESHOLD", "TP_PCT", "SL_PCT",
+    "AMOUNT_USD", "EXCHANGE_RATE", "AMOUNT_KRW", "PROFIT_PCT", "PROFIT_PCT_KRW", "THRESHOLD", "TP_PCT", "SL_PCT",
     "TRAILING_START_PCT", "TRAILING_STOP_PCT", "MAX_HOLD_DAYS",
 ]
 
@@ -72,6 +72,7 @@ _DEFINITION_ROWS = [
     ["주식", "EXCHANGE_RATE",      "환율(USD/KRW)", "매수/매도 시 적용 환율 (원/달러)",          "NUMBER",  "소수점2자리 / 1384.50"],
     ["주식", "AMOUNT_KRW",         "거래금액(KRW)", "거래 금액 (원화 환산)",                     "NUMBER",  "정수 / 276900"],
     ["주식", "PROFIT_PCT",         "수익률",         "실현 수익률(%), 매수 시 공백",             "NUMBER",  "소수점2자리 / 1.23"],
+    ["주식", "PROFIT_PCT_KRW",    "원화수익률",     "KRW 환산 실현 수익률(%), 매수환율→매도환율 반영",  "NUMBER",  "소수점2자리 / 1.45"],
     ["주식", "THRESHOLD",          "진입임계치",     "매수 신호 점수 임계값",                   "NUMBER",  "정수 / 12"],
     ["주식", "TP_PCT",             "익절비율",       "익절 기준 수익률(%)",                     "NUMBER",  "소수점1자리 / 5.0"],
     ["주식", "SL_PCT",             "손절비율",       "손절 기준 손실률(%)",                     "NUMBER",  "소수점1자리 / 3.0"],

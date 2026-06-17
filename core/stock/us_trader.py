@@ -68,6 +68,7 @@ def _log_us_trade(record: dict):
                     record.get("exchange_rate", ""),
                     record.get("amount_krw", ""),
                     record.get("ret_pct", ""),
+                    record.get("ret_pct_krw", ""),
                     record.get("threshold", config.US_BUY_SCORE_THRESHOLD),
                     record.get("tp_pct", config.US_TAKE_PROFIT_PERCENT),
                     record.get("sl_pct", config.US_MAX_LOSS_PERCENT),
@@ -205,6 +206,8 @@ def _us_worker():
                     ret_pct = (current_price * (1 - config.US_FEE_RATE)) / (entry_price * (1 + config.US_FEE_RATE)) - 1
                     proceeds_usd = qty * current_price * (1 - config.US_FEE_RATE)
                     proceeds_krw = proceeds_usd * exit_exchange_rate
+                    cost_krw = qty * entry_price * (1 + config.US_FEE_RATE) * pos.get("entry_exchange_rate", exit_exchange_rate)
+                    ret_pct_krw = proceeds_krw / cost_krw - 1 if cost_krw else ret_pct
                     ts = datetime.now(_KST)
 
                     if not config.US_IS_LIVE:
@@ -225,6 +228,8 @@ def _us_worker():
 
                     sign = "+" if ret_pct >= 0 else ""
                     emoji = "📈" if ret_pct >= 0 else "📉"
+                    krw_sign = "+" if ret_pct_krw >= 0 else ""
+                    krw_emoji = "📈" if ret_pct_krw >= 0 else "📉"
                     record = {
                         "symbol": symbol, "name": name, "excd": excd,
                         "mode": "sim" if not config.US_IS_LIVE else "live",
@@ -233,7 +238,8 @@ def _us_worker():
                         "amount_usd": round(proceeds_usd, 4),
                         "exchange_rate": round(exit_exchange_rate, 2),
                         "amount_krw": round(proceeds_krw, 0),
-                        "ret_pct": round(ret_pct * 100, 4), "reason": sell_reason,
+                        "ret_pct": round(ret_pct * 100, 4),
+                        "ret_pct_krw": round(ret_pct_krw * 100, 4), "reason": sell_reason,
                         "ts": ts.isoformat(),
                     }
                     _log_us_trade(record)
@@ -242,7 +248,7 @@ def _us_worker():
                         bal_krw = _us_sim_krw
                     notifier.send_stock(
                         f"<b>🔴 미국주식 매도</b> · {html.escape(name)}({html.escape(symbol)}) <i>({'시뮬' if not config.US_IS_LIVE else '실거래'})</i>\n"
-                        f"{emoji} 수익률: <b>{sign}{ret_pct*100:.2f}%</b>\n"
+                        f"{krw_emoji} 수익률: <b>{krw_sign}{ret_pct_krw*100:.2f}%</b> (KRW) / {sign}{ret_pct*100:.2f}% (USD)\n"
                         f"매수가: ${entry_price:.4f} → 매도가: ${current_price:.4f}\n"
                         f"수익: ₩{proceeds_krw - pos.get('entry_exchange_rate', exit_exchange_rate) * entry_price * qty * (1 + config.US_FEE_RATE):,.0f} | 환율: {exit_exchange_rate:,.1f}원\n"
                         f"잔고: ₩{bal_krw:,.0f} | 사유: {html.escape(sell_reason)}"
