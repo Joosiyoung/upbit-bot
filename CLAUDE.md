@@ -1,6 +1,6 @@
 # Upbit 자동매매 봇
 
-Flask + pyupbit 기반 코인 자동매매 + KIS API 기반 국내/미국 주식 시뮬 봇. 대시보드(웹), Telegram 원격 제어, Oracle Cloud VPS 24시간 운영.
+Flask + pyupbit 기반 코인 자동매매 + KIS API 기반 국내주식 시뮬 봇. 대시보드(웹), Telegram 원격 제어, Oracle Cloud VPS 24시간 운영.
 
 ## 실행 명령어
 
@@ -126,14 +126,12 @@ core/
   notifier.py           # Telegram 알림 발송
   upbit_client.py       # pyupbit 래퍼
   ai_analysis.py        # Fear & Greed 조회·캐시 워커
-  sheets_client.py      # Google Sheets 실시간 거래 적재 (코인·미국주식, 오프라인 버퍼링)
+  sheets_client.py      # Google Sheets 실시간 거래 적재 (코인·국내주식, 오프라인 버퍼링)
   stock/
     trader.py           # 국내 주식 시뮬 매매 로직 + _stock_market_notifier(장 시작 알림 데몬)
     trading_control.py  # 국내 주식 시작/중지/상태 (Flask ↔ Telegram 공용)
-    us_trader.py        # 미국주식 시뮬 매매 로직 (KRW 예산·환율·소수점 거래)
-    us_universe.py      # 미국주식 유니버스 (KIS 거래량순위 기반 동적, NAS+NYS 각 10종목, fallback 고정 19종목)
     kis_auth.py         # KIS OAuth2 토큰 관리
-    kis_client.py       # KIS API 래퍼 (국내 OHLCV·현재가 + 해외 OHLCV·현재가·소수점 주문 + 환율 조회)
+    kis_client.py       # KIS API 래퍼 (국내 OHLCV·현재가·거래량순위)
     universe.py         # 국내 매매 대상 종목 풀 (KOSPI 대형주 19종목, KB금융 제외)
 scripts/
   backtest.py           # 코인 백테스터
@@ -142,8 +140,6 @@ data/
   trade_history.jsonl         # 코인 거래 이력 (365일 보존)
   stock_trade_history.jsonl   # 국내 주식 시뮬 거래 이력
   stock_state.json            # 국내 주식 시뮬 상태 (포지션·잔고, 재시작 복원)
-  us_stock_state.json         # 미국주식 시뮬 상태 (포지션·달러 잔고, 재시작 복원)
-  us_stock_trade_history.jsonl # 미국주식 시뮬 거래 이력
   sheets_buffer.jsonl         # Google Sheets 오프라인 버퍼 (네트워크 오류 시 임시 보관)
 logs/
   bot.log               # 운영 로그 (35일 보존, 자정 회전)
@@ -186,11 +182,11 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 파라미터 | 기본값 | 설명 |
 |---------|--------|------|
 | `STOCK_BUY_SCORE_THRESHOLD` | 12 | 진입 점수 임계치 (일봉 × 2.5 가중치) |
-| `STOCK_MAX_LOSS_PERCENT` | 3.0% | 손절 |
+| `STOCK_MAX_LOSS_PERCENT` | 5.0% | 손절 (3년 KOSPI 백테스트 재튜닝: 3.0→5.0) |
 | `STOCK_TAKE_PROFIT_PERCENT` | 5.0% | 익절 |
-| `STOCK_TRAILING_START_PCT` | 3.0% | 트레일링 스탑 활성화 수익률 |
-| `STOCK_TRAILING_STOP_PCT` | 1.5% | 고점 대비 하락 한도 |
-| `STOCK_MAX_HOLD_DAYS` | 5 | time-stop (영업일 기준) |
+| `STOCK_TRAILING_START_PCT` | 9999 | **트레일링 비활성** (백테스트상 이익 조기 절단으로 손해 → 도달 불가능 값으로 OFF) |
+| `STOCK_TRAILING_STOP_PCT` | 1.5% | 고점 대비 하락 한도 (트레일링 OFF로 미사용) |
+| `STOCK_MAX_HOLD_DAYS` | 20 | time-stop (영업일 기준, 재튜닝: 5→20) |
 | `STOCK_MAX_PRICE` | 200,000 | 1주 가격 상한 (투자금÷슬롯 기준) |
 | `STOCK_BUY_CLOSE_TIME` | 15:20 | 신규 매수 마감 시각 |
 | `STOCK_ENTRY_CHANGE_MAX` | +2.0% | 당일 등락률 상한 — 갭업 추격 차단 |
@@ -200,23 +196,7 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | `STOCK_ADD_BUY_MAX_PROFIT` | 2.0% | 추가매수 허용 최대 수익률 — 추격매수 방지 |
 | `STOCK_MAX_SLOTS_PER_TICKER` | 2 | 종목당 최대 슬롯 수 (추가매수 상한) |
 
-### 미국주식 (config.py US_*)
-
-| 파라미터 | 기본값 | 설명 |
-|---------|--------|------|
-| `US_SIM_BUDGET` | 1,000,000 | 시뮬 초기 예산 (KRW 기준, 매수 시 환율로 USD 환산) |
-| `US_MAX_POSITIONS` | 5 | 최대 동시 보유 종목 수 |
-| `US_BUY_SCORE_THRESHOLD` | 12 | 진입 점수 임계치 |
-| `US_MAX_LOSS_PERCENT` | 3.0% | 손절 |
-| `US_TAKE_PROFIT_PERCENT` | 5.0% | 익절 |
-| `US_TRAILING_START_PCT` | 3.0% | 트레일링 스탑 활성화 수익률 |
-| `US_TRAILING_STOP_PCT` | 1.5% | 고점 대비 하락 한도 |
-| `US_MAX_HOLD_DAYS` | 5 | time-stop (일수) |
-| `US_FEE_RATE` | 0.0125 | 편도 수수료율 (KIS 환전 스프레드 1% + 매매 수수료 0.25%) |
-| `US_DEFAULT_EXCHANGE_RATE` | 1380.0 | USD/KRW 환율 fallback (환율 조회 완전 실패 시에만 사용) |
-| `US_ENTRY_CHANGE_MIN` | -3.0% | 당일 등락률 하한 — 폭락 종목 진입 차단 |
-| `US_ENTRY_CHANGE_MAX` | +2.0% | 당일 등락률 상한 — 갭업 추격 차단 |
-| `US_IS_LIVE` | False | True=실거래 주문. 기본값 False (시뮬 전용) |
+> **미국주식 모듈 제거됨 (2026-06-17)**: 3년 백테스트 결과 미국 일봉 스윙은 환전 스프레드 포함 왕복 2.5% 수수료로 72조합 전부 손실 → `us_trader.py`·`us_universe.py`·`US_*` 파라미터·미국 Telegram 명령 전면 삭제. 같은 신호가 국내(왕복 0.6%)에선 흑자라 국내 전용으로 롤백. 상세는 메모리 `project_us_vs_kr_backtest` 참조.
 
 ## 매수 차단 게이트
 
@@ -235,12 +215,6 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 5. 당일 매도 이력 — `_stock_sold_today`에 기록된 종목 당일 재진입 차단
 6. 당일 등락률 범위 초과 — `(현재가/전일종가 - 1) × 100` < `STOCK_ENTRY_CHANGE_MIN` 또는 > `STOCK_ENTRY_CHANGE_MAX`
 
-**미국주식**
-1. 장 외 시간 — KST 22:30~05:00 범위 외 또는 주말이면 워커 비활성
-2. 당일 등락률 범위 초과 — `US_ENTRY_CHANGE_MIN`(-3%) ~ `US_ENTRY_CHANGE_MAX`(+2%) 벗어난 종목 차단
-3. 당일 매도 이력 — `_us_sold_today`에 기록된 종목 당일 재진입 차단
-4. 진입 점수 < `US_BUY_SCORE_THRESHOLD`
-
 ## 주요 Gotchas
 
 - **`_KST = config.KST`** — 반드시 `from core import config` 이후에. 순서 역전 시 `NameError`로 크래시.
@@ -258,15 +232,10 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 - **`settings.json` VPS 미동기화 (의도적)** — Windows 전용 경로·명령(taskkill, powershell, cmd.exe 등) 포함. `.claude/*` gitignore로 제외됨. VPS는 Remote Control 최초 실행 시 자체 Linux 설정 자동 생성.
 - **`build_stock_status_msg` 현재가 조회** — `get_current_price()`는 예외를 던지지 않고 None 반환. `try/except` 사용 금지. `if not price: price = entry_price` 패턴 사용. None 반환 시 진입가를 fallback으로 표시하고 `(진입가)` suffix 추가.
 - **KIS sandbox 상시 500 오류 종목** — `universe.py`에서 KB금융(105560) 제거됨. KIS sandbox 환경에서 해당 종목 조회 시 항상 500 에러 반환 → 유니버스 19종목으로 고정.
-- **`US_FEE_RATE = 0.0125`** — KIS 원화결제 서비스 기준 편도 1.25% (환전 스프레드 1.0% + 매매수수료 0.25%). 왕복 약 2.5%. `US_DEFAULT_EXCHANGE_RATE=1380.0`은 첫 환율 조회 완전 실패 시에만 사용 (sticky cache 우선).
-- **`kis_client.get_usd_krw_rate()`** — `open.er-api.com` 1시간 캐시. 조회 실패 시 마지막 성공 환율 유지(sticky cache). 환율이 한 번도 조회되지 않은 상태에서 실패 시에만 `US_DEFAULT_EXCHANGE_RATE` 사용.
-- **Sheets "주식" 시트** — 재시작마다 `clear()` 후 `_US_STOCK_HEADERS` 18컬럼으로 초기화됨. 미국주식 거래 데이터만 누적. 국내주식 Sheets 로깅은 비활성(주석 처리).
-- **주식 봇 Telegram 명령** — 현재 9개 활성 (`/us_start_sim`, `/us_stop`, `/us_status`, `/us_perf`, `/us_history`, `/us_params`, `/us_universe`, `/us_market`, `/help`). 국내주식 명령은 `telegram_bot.py` `_handle_stock_command()`에 주석으로 보존. 복구 시 주석 해제.
-- **미국주식 동적 유니버스** — `us_universe.py`의 `get_us_universe(client)` 는 KIS TR `HHDFS76310010`으로 NAS/NYS 각 10종목(총 20종목) 조회 후 당일 캐시. fallback 캐시는 30분 TTL — 장 재개 시 빠르게 갱신됨. 완전 실패 시 고정 19종목으로 fallback.
-- **`/us_status` 현재가** — 포지션별 현재가는 워커가 매 사이클에 갱신하는 `last_price`를 우선 사용. `last_price` 없을 때만 KIS API 직접 조회. `/us_status` 호출 시 KIS 직렬 호출 제거됨.
-- **`_us_sold_today` 초기화 기준** — KST 자정(00:00)이 아닌 05:00(장마감 시각) 기준으로 초기화. 미국 장은 KST 22:30~05:00이므로 자정에 초기화하면 당일 매도 이력이 장 중 소실됨.
-- **`ret_pct_krw`** — 매도 시 KRW 기준 수익률 = `(매도가 × 매도환율 - 매수가 × 매수환율) / (매수가 × 매수환율) × 100`. USD 기준 수익률(`ret_pct`)과 병기. 환전 손익이 포함된 실질 원화 수익률.
-- **`_stock_market_notifier` 제거** — 미국주식 전용 운영으로 전환 후 `app.py`에서 국내주식 장 시작 알림 스레드 기동 코드를 제거. 국내주식 재활성화 시 `app.py` 스레드 기동 코드 복구 필요.
+- **Sheets "주식" 시트** — 국내주식 16컬럼(`_STOCK_HEADERS`)으로 운영. 코인·국내주식 2개 시트 + 테이블정의서. 국내주식 Sheets 로깅 활성(`trader._log_trade`).
+- **주식 봇 Telegram 명령** — 현재 9개 활성 (`/start_sim`, `/stop`, `/status`, `/perf`, `/positions`, `/history`, `/params`, `/market`, `/help`). 모두 국내주식 전용.
+- **트레일링 비활성 방식** — `STOCK_TRAILING_START_PCT=9999`로 트레일링 분기가 절대 발동하지 않게 설정만으로 OFF (trader.py 로직 무변경). 재활성화 시 값을 정상 범위(예: 3.0)로 되돌리면 됨.
+- **`_stock_market_notifier` 기동** — `app.py`에서 국내주식 장 시작(09:00) 알림 스레드 기동. 시뮬 상태와 무관하게 항상 동작.
 
 ## 최근 변경 이력
 
@@ -314,6 +283,10 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 2026-06-17 | 인프라 | feat(telegram): 코인봇 `/universe` 추가 (스캔 코인 목록·점수), 미국주식봇 명령 4→9개 확장 (`/us_perf`, `/us_history`, `/us_params`, `/us_universe`, `/us_market`) |
 | 2026-06-17 | 인프라 | fix(telegram): `/us_start_sim` 장 외 시간 호출 시 '현재 장 외 시간, 개장 시 자동 시작' 안내 메시지 추가 |
 | 2026-06-17 | 인프라 | fix(app): 국내주식 장 시작 알림 스레드(`_stock_market_notifier`) 무조건 기동 코드 제거 — 미국주식 전용 운영 전환 반영 |
+| 2026-06-17 | 검증 | 3시장 yfinance 백테스트 — 미국 일봉 스윙 3년×72조합 전부 손실(왕복 수수료 2.5%), 국내 KOSPI는 48/72 흑자, 코인은 29/72(현 라이브 파라미터는 3시장 모두 손실). 메모리 `project_us_vs_kr_backtest` |
+| 2026-06-17 | 미국주식 | **refactor: 미국주식 전면 제거** — `us_trader.py`·`us_universe.py`·kis_client 해외 메서드·`US_*` config·`/api/us/*` 라우트·미국 Telegram 명령 9개 삭제 (수수료 구조상 수익 불가 확정) |
+| 2026-06-17 | 주식 | **국내 복귀** — `_stock_market_notifier` 기동 복구, 국내 Sheets 로깅 복구("주식" 시트 16컬럼), 주식봇 Telegram 국내 명령 9개 복구 |
+| 2026-06-17 | 주식 | **파라미터 재튜닝(KOSPI 3년 수익최대형)** — 손절 3→5%, 보유 5→20일, 트레일링 OFF(`STOCK_TRAILING_START_PCT=9999`), 익절 5% 유지 |
 
 ## VPS 인프라
 
