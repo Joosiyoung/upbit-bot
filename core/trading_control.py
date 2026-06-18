@@ -276,10 +276,15 @@ def status_summary() -> str:
         lines.append(f"\n<b>보유 포지션 ({len(positions)}/{MAX_POSITIONS})</b>")
         total_invested = 0.0
         total_value    = 0.0
+        _price_client  = UpbitClient()
         for ticker, pos in positions.items():
             entry   = pos.get("entry_price", 0)
             amount  = pos.get("amount_krw", 0)
             current = market_map.get(ticker)
+            # 톱20 스캔·홀딩 캐시 양쪽에 없는 보유 종목(거래대금 하위)은
+            # 실시간 직접 조회로 보강 (보유 ≤ MAX_POSITIONS라 부담 미미)
+            if not current:
+                current = _price_client.get_current_price(ticker, warn=False) or None
             total_invested += amount
             if current and entry > 0:
                 # 시뮬·실거래 동일 회계: 매도 수수료 차감 실수령 기준 (대시보드와 일치)
