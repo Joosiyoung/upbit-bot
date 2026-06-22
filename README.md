@@ -82,10 +82,10 @@ logs/
 | `GOOGLE_SHEETS_KEY_FILE` | `warm-alliance-*.json` | Service Account JSON 키 파일 경로. **git 미추적 — VPS에 별도 SCP 전송 필요** |
 | `MAX_POSITIONS` | `5` | 최대 동시 보유 종목 수 |
 | `EQUAL_WEIGHT_SIZING` | `True` | True: 종목당 금액을 (총자산 ÷ MAX_POSITIONS)로 상한 — 마지막 슬롯에 잔고 전액 몰림 방지 |
-| `MAX_LOSS_PERCENT` | `3.0` | 손절 (%) |
-| `TAKE_PROFIT_PERCENT` | `5.0` | 익절 (%) |
-| `TRAILING_START_PCT` | `3.0` | 트레일링 스탑 활성화 수익률 (%) |
-| `TRAILING_STOP_PCT` | `1.5` | 고점 대비 하락 한도 (%) |
+| `MAX_LOSS_PERCENT` | `4.0` | 손절 (%) — 2026-06-22 알트 재튜닝(3→4) |
+| `TAKE_PROFIT_PERCENT` | `6.0` | 익절 (%) — 2026-06-22 재튜닝(5→6) |
+| `TRAILING_START_PCT` | `9999` | 트레일링 비활성 (승자 조기절단 → OFF). 재활성화 시 정상값 복원 |
+| `TRAILING_STOP_PCT` | `1.5` | 고점 대비 하락 한도 (%) — 트레일링 OFF로 미사용 |
 | `MAX_HOLD_HOURS` | `48` | time-stop (시간) |
 | `BUY_SCORE_THRESHOLD` | `12` | 진입 점수 임계치 (backtest 검증값) |
 | `MARKET_REGIME_FILTER` | `True` | BTC 하락 추세 시 전 종목 매수 차단 |
