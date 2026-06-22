@@ -9,5 +9,5 @@ TMUX_BIN="/usr/bin/tmux"
 if "$TMUX_BIN" has-session -t "$SESSION" 2>/dev/null; then
   exit 0
 fi
-"$TMUX_BIN" new-session -d -s "$SESSION" -c "$PROJECT_DIR" "cd $PROJECT_DIR && exec claude --remote-control"
+"$TMUX_BIN" new-session -d -s "$SESSION" -c "$PROJECT_DIR" "cd $PROJECT_DIR && unset ANTHROPIC_API_KEY && exec claude --remote-control"
 echo "$(date '+%Y-%m-%d %H:%M:%S') watchdog: claude-remote 세션 재기동" >> "$PROJECT_DIR/logs/claude-watchdog.log"

@@ -9,5 +9,5 @@ TMUX_BIN="/usr/bin/tmux"
 
 "$TMUX_BIN" kill-session -t "$SESSION" 2>/dev/null || true
 sleep 1
-"$TMUX_BIN" new-session -d -s "$SESSION" -c "$PROJECT_DIR" "cd $PROJECT_DIR && exec claude --remote-control"
+"$TMUX_BIN" new-session -d -s "$SESSION" -c "$PROJECT_DIR" "cd $PROJECT_DIR && unset ANTHROPIC_API_KEY && exec claude --remote-control"
 echo "claude-remote 세션 재시작 완료 ($(date '+%Y-%m-%d %H:%M:%S'))"
