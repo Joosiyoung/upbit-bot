@@ -169,10 +169,10 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 |---------|--------|------|
 | `BUY_SCORE_THRESHOLD` | 12 | 진입 점수 임계치 (365일 백테스트: +0.15% 기대값) |
 | `MARKET_REGIME_FILTER` | True | BTC EMA 하락 시 전 종목 매수 차단 |
-| `MAX_LOSS_PERCENT` | 3.0% | 손절 |
-| `TAKE_PROFIT_PERCENT` | 5.0% | 익절 |
-| `TRAILING_START_PCT` | 3.0% | 트레일링 스탑 활성화 수익률 |
-| `TRAILING_STOP_PCT` | 1.5% | 고점 대비 하락 한도 |
+| `MAX_LOSS_PERCENT` | 4.0% | 손절 (2026-06-22 알트 유니버스 재튜닝: 3.0→4.0) |
+| `TAKE_PROFIT_PERCENT` | 6.0% | 익절 (2026-06-22 재튜닝: 5.0→6.0, 알트 변동성에 넓은 타깃) |
+| `TRAILING_START_PCT` | 9999 | **트레일링 비활성** (트레일링이 +5% 익절 도달을 100% 차단·승자 조기절단 → 9999로 OFF, 주식 모듈과 동일 방식) |
+| `TRAILING_STOP_PCT` | 1.5% | 고점 대비 하락 한도 (트레일링 OFF로 미사용) |
 | `MAX_HOLD_HOURS` | 48h | time-stop |
 | `DAILY_LOSS_LIMIT_PCT` | 5.0% | 일일 손실 한도 초과 시 당일 매수 차단 |
 | `EQUAL_WEIGHT_SIZING` | True | 종목당 금액을 (총자산÷MAX_POSITIONS)로 상한 |
@@ -289,6 +289,7 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 2026-06-17 | 주식 | **국내 복귀** — `_stock_market_notifier` 기동 복구, 국내 Sheets 로깅 복구("주식" 시트 16컬럼), 주식봇 Telegram 국내 명령 9개 복구 |
 | 2026-06-17 | 주식 | **파라미터 재튜닝(KOSPI 3년 수익최대형)** — 손절 3→5%, 보유 5→20일, 트레일링 OFF(`STOCK_TRAILING_START_PCT=9999`), 익절 5% 유지 |
 | 2026-06-17 | 인프라 | 서브에이전트(`.claude/agents/`)가 이 세션 Agent 툴에 미등록 → coder/tester/pm/deployer 호출 불가. 정의·설정 정상, 세션 레벨 문제. 메인이 파이프라인 전 단계 직접 대행하여 배포 완료 (gotcha 추가) |
+| 2026-06-22 | 코인 | **파라미터 재튜닝(알트 유니버스 적합)** — 익절 5→6%, 손절 3→4%, 트레일링 OFF(`TRAILING_START_PCT=9999`), 임계치 12·보유 48h 유지. 라이브 로그(6/12~6/22, 140건) 분석 결과 봇이 매매하는 알트 유니버스가 백테스트 검증 대상(대형주)과 불일치 → 실제 알트 10종 백테스트(90일+12일 교차검증)에서 TP6/SL4/trailOFF가 두 레짐 모두 우위(12일 기대값 +0.075%→+0.271%). 트레일링은 +5% 익절 도달을 100% 차단(승자 조기절단)하여 OFF. 상세 `draft/coin_strategy_review_2026-06-22.md` |
 
 ## VPS 인프라
 

@@ -16,9 +16,9 @@ SECRET_KEY = os.getenv("UPBIT_SECRET_KEY", "")
 # 1회 매수 금액 (KRW)
 TRADE_AMOUNT_KRW = float(os.getenv("TRADE_AMOUNT_KRW", "100000"))
 
-# 손절/익절 설정
-MAX_LOSS_PERCENT = float(os.getenv("MAX_LOSS_PERCENT", "3.0"))
-TAKE_PROFIT_PERCENT = float(os.getenv("TAKE_PROFIT_PERCENT", "5.0"))
+# 손절/익절 설정 (2026-06-22 알트 유니버스 재튜닝: 3→4 / 5→6, draft/coin_strategy_review_2026-06-22.md)
+MAX_LOSS_PERCENT = float(os.getenv("MAX_LOSS_PERCENT", "4.0"))
+TAKE_PROFIT_PERCENT = float(os.getenv("TAKE_PROFIT_PERCENT", "6.0"))
 
 # 전략 선택: rsi / macd / bollinger / combined
 STRATEGY = os.getenv("STRATEGY", "combined")
@@ -42,8 +42,9 @@ MAX_HOLD_HOURS           = float(os.getenv("MAX_HOLD_HOURS",           "48"))   
 MARKET_STALE_SEC         = int(os.getenv("MARKET_STALE_SEC",           "180"))  # 시장 캐시 신선도 한계 (초) → 초과 시 신규 매수 차단
 
 # ─── 트레일링 스탑 ───
-TRAILING_START_PCT = float(os.getenv("TRAILING_START_PCT", "3.0"))  # 최고 수익률이 이 값 이상이면 트레일링 활성화 (%)
-TRAILING_STOP_PCT  = float(os.getenv("TRAILING_STOP_PCT",  "1.5"))  # 고점 대비 하락폭 한도 (%) → 초과 시 청산
+# 2026-06-22: 트레일링이 +5% 익절 도달을 100% 차단(승자 조기절단) → 9999로 OFF (주식 모듈과 동일 방식, 로직 무변경)
+TRAILING_START_PCT = float(os.getenv("TRAILING_START_PCT", "9999"))  # 최고 수익률이 이 값 이상이면 트레일링 활성화 (%). 9999=비활성
+TRAILING_STOP_PCT  = float(os.getenv("TRAILING_STOP_PCT",  "1.5"))  # 고점 대비 하락폭 한도 (%) → 초과 시 청산 (트레일링 OFF로 미사용)
 
 # ─── 추가매수 (Phase 2.5) ───
 ADD_BUY_MIN_PROFIT   = float(os.getenv("ADD_BUY_MIN_PROFIT",   "0.0"))  # 추가매수 허용 최소 수익률 (%) — 손실 중 물타기 방지
