@@ -42,7 +42,7 @@ core/
   data_builder.py        # 시장 분석 데이터 빌드·캐시
   analysis.py            # 진입 점수 계산 (score_signal)
   indicators.py          # RSI, MACD, 볼린저, EMA
-  telegram_bot.py        # Telegram 명령 봇
+  telegram_bot.py        # Telegram 명령 봇 (코인봇 13개 명령)
   notifier.py            # Telegram 알림 발송
   upbit_client.py        # pyupbit 래퍼
   ai_analysis.py         # Fear & Greed 조회·캐시 워커
@@ -56,6 +56,9 @@ core/
 scripts/
   backtest.py            # 백테스터 (라이브 룰 동일 재현)
   stock_backtest.py      # 주식 백테스터 (KIS OHLCV → score_signal)
+deploy/
+  restart-claude.sh      # VPS claude-remote tmux 세션 재시작 스크립트 (100755)
+  claude-remote-watchdog.sh  # 세션 미기동 시 자동 복구 (cron @reboot + */5)
 data/
   trade_history.jsonl         # 코인 거래 이력 (365일 보존)
   stock_trade_history.jsonl   # 주식 시뮬 거래 이력
@@ -184,6 +187,7 @@ logs/
 | `/start_live` | 실거래 시작 (/confirm 필요) |
 | `/stop` | 매매 중지 (보유 유지) |
 | `/liquidate` | 중지 + 전액 청산 (/confirm 필요) |
+| `/restart_claude` | VPS claude-remote tmux 세션 재시작 (/confirm 필요, 본인 chat_id만) |
 | `/help` | 명령어 목록 |
 | (자동) 매일 09:00 KST | 전일 09:00 ~ 당일 08:59 거래 통계 자동 전송 (시뮬/실거래 분리) |
 
@@ -210,6 +214,7 @@ logs/
 - `upbit-bot.service` (systemd, 자동 재시작)
 - 대시보드는 Tailscale 경유 접속 (공인 IP 직접 노출 없음)
 - 배포: `git push` → VPS에서 `git pull && systemctl restart`
+- Claude Code Remote Control: `claude-remote` tmux 세션, `deploy/claude-remote-watchdog.sh` cron으로 5분 주기 자동복구. 폰 Telegram `/restart_claude` 명령으로 세션 재시작 가능
 
 상세 배포 가이드: [deploy/DEPLOY_GUIDE.md](deploy/DEPLOY_GUIDE.md)
 

@@ -122,7 +122,7 @@ core/
   data_builder.py       # 시장 분석 데이터 빌드·캐시
   analysis.py           # 진입 점수 계산 (score_signal — 코인·주식 공용)
   indicators.py         # RSI, MACD, 볼린저, EMA
-  telegram_bot.py       # Telegram 명령 봇
+  telegram_bot.py       # Telegram 명령 봇 (코인봇 13개 명령 포함 /restart_claude)
   notifier.py           # Telegram 알림 발송
   upbit_client.py       # pyupbit 래퍼
   ai_analysis.py        # Fear & Greed 조회·캐시 워커
@@ -136,6 +136,9 @@ core/
 scripts/
   backtest.py           # 코인 백테스터
   stock_backtest.py     # 주식 백테스터 (KIS OHLCV → score_signal × 2.5)
+deploy/
+  restart-claude.sh     # VPS claude-remote tmux 세션 kill 후 재기동 스크립트 (실행권한 100755 git 추적)
+  claude-remote-watchdog.sh  # 세션 없을 때만 기동(멱등). cron: @reboot + */5 자동복구
 data/
   trade_history.jsonl         # 코인 거래 이력 (365일 보존)
   stock_trade_history.jsonl   # 국내 주식 시뮬 거래 이력
@@ -236,7 +239,10 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 - **주식 봇 Telegram 명령** — 현재 9개 활성 (`/start_sim`, `/stop`, `/status`, `/perf`, `/positions`, `/history`, `/params`, `/market`, `/help`). 모두 국내주식 전용.
 - **트레일링 비활성 방식** — `STOCK_TRAILING_START_PCT=9999`로 트레일링 분기가 절대 발동하지 않게 설정만으로 OFF (trader.py 로직 무변경). 재활성화 시 값을 정상 범위(예: 3.0)로 되돌리면 됨.
 - **`_stock_market_notifier` 기동** — `app.py`에서 국내주식 장 시작(09:00) 알림 스레드 기동. 시뮬 상태와 무관하게 항상 동작.
-- **프로젝트 서브에이전트 미등록 가능성** — 일부 런타임 세션(예: VPS Remote Control)에서 `.claude/agents/`의 coder·tester·pm·deployer 등이 Agent 툴 `subagent_type`으로 로드되지 않을 수 있다(빌트인만 노출). 정의 파일·설정은 정상인데 세션 레벨 미등록 문제. `'coder' not found. Available agents: claude, ...` 에러로 나타남. 복구: 프로젝트 디렉터리에서 세션 재시작. 그래도 안 되면 메인이 coder→tester→pm→deployer 역할을 직접 대행(구현+구문/임포트/스모크 검사+체크리스트+배포)한다(2026-06-17 실제 발생).
+- **프로젝트 서브에이전트 미등록 가능성** — 일부 런타임 세션(예: VPS Remote Control)에서 `.claude/agents/`의 coder·tester·pm·deployer 등이 Agent 툴 `subagent_type`으로 로드되지 않을 수 있다(빌트인만 노출). 정의 파일·설정은 정상인데 세션 레벨 미등록 문제. `'coder' not found. Available agents: claude, ...` 에러로 나타남. 복구: 프로젝트 디렉터리에서 세션 재시작. 그래도 안 되면 메인이 coder→tester→pm→deployer 역할을 직접 대행(구현+구문/임포트/스모크 검사+체크리스트+배포)한다(2026-06-17 실제 발생). `/restart_claude` Telegram 명령으로 폰에서 세션 재시작 가능(2026-06-22).
+- **`ANTHROPIC_API_KEY` 프롬프트 차단** — `.env`에 `ANTHROPIC_API_KEY`가 환경에 있으면 새 `claude --remote-control` 기동 시 "이 키 사용할까요?" 대화형 프롬프트에서 멈춰 리모트 컨트롤이 뜨지 않는다. 해결: `restart-claude.sh` 기동 명령에 `unset ANTHROPIC_API_KEY` 포함(Remote Control은 Claude Pro 로그인으로 동작, API 키 불필요). 한 번 "No" 응답이 `~/.claude.json` `customApiKeyResponses.rejected`에 영구저장됨.
+- **deploy/*.sh 실행권한 git 추적** — Windows에서 커밋 시 `.sh` 실행 비트가 유실되어 리포에 100644로 저장됨. VPS에서 pull마다 +x가 사라져 watchdog cron(직접 실행)이 `Permission denied`로 silent fail. 해결: `git update-index --chmod=+x deploy/restart-claude.sh deploy/claude-remote-watchdog.sh`로 100755 기록 → pull해도 +x 유지.
+- **claude-remote 세션 운영** — `deploy/claude-remote-watchdog.sh`가 cron(`@reboot` + `*/5 * * * *`)으로 세션 자동복구. `deploy/restart-claude.sh`는 폰 `/restart_claude` Telegram 명령으로 호출. 봇은 `upbit-bot.service` 별도 프로세스라 claude-remote 세션 종료와 무관하게 동작. 단 세션 *내부* 자기재시작은 자기참조로 불가(setsid 분리 필요) — `restart-claude.sh`는 봇이 아닌 외부 Telegram 명령을 통해 호출되므로 문제 없음.
 
 ## 최근 변경 이력
 
@@ -290,6 +296,7 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 2026-06-17 | 주식 | **파라미터 재튜닝(KOSPI 3년 수익최대형)** — 손절 3→5%, 보유 5→20일, 트레일링 OFF(`STOCK_TRAILING_START_PCT=9999`), 익절 5% 유지 |
 | 2026-06-17 | 인프라 | 서브에이전트(`.claude/agents/`)가 이 세션 Agent 툴에 미등록 → coder/tester/pm/deployer 호출 불가. 정의·설정 정상, 세션 레벨 문제. 메인이 파이프라인 전 단계 직접 대행하여 배포 완료 (gotcha 추가) |
 | 2026-06-22 | 코인 | **파라미터 재튜닝(알트 유니버스 적합)** — 익절 5→6%, 손절 3→4%, 트레일링 OFF(`TRAILING_START_PCT=9999`), 임계치 12·보유 48h 유지. 라이브 로그(6/12~6/22, 140건) 분석 결과 봇이 매매하는 알트 유니버스가 백테스트 검증 대상(대형주)과 불일치 → 실제 알트 10종 백테스트(90일+12일 교차검증)에서 TP6/SL4/trailOFF가 두 레짐 모두 우위(12일 기대값 +0.075%→+0.271%). 트레일링은 +5% 익절 도달을 100% 차단(승자 조기절단)하여 OFF. 상세 `draft/coin_strategy_review_2026-06-22.md` |
+| 2026-06-22 | 인프라 | **폰 Remote Control 운영 체계 구축** — `/restart_claude` Telegram 명령 신설(코인봇, 2단계 `/confirm` 패턴, chat_id 인증). `deploy/restart-claude.sh`(세션 kill+재기동, `unset ANTHROPIC_API_KEY` 포함)·`deploy/claude-remote-watchdog.sh`(멱등 기동, cron `@reboot`+`*/5`) 신규. `.sh` 실행권한 `git update-index --chmod=+x`로 100755 git 추적. 코인봇 명령 12→13개 |
 
 ## VPS 인프라
 
