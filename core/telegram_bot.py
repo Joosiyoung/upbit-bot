@@ -28,6 +28,7 @@
 
 import html
 import logging
+import subprocess
 import threading
 import time
 from datetime import datetime, timedelta
@@ -66,6 +67,7 @@ _HELP_TEXT = (
     "/liquidate — 중지 + 전액 청산 (확인 필요)\n"
     "/confirm — 위험 명령 확인 (60초 이내)\n"
     "/universe — 코인 유니버스 (스캔 목록·점수)\n"
+    "/restart_claude — Claude 리모트 세션 재시작 (확인 필요)\n"
     "/help — 이 도움말"
 )
 
@@ -104,8 +106,9 @@ _BOT_COMMANDS = [
     {"command": "start_live", "description": "실거래 시작 (확인 필요)"},
     {"command": "stop",       "description": "매매 중지 (보유 유지)"},
     {"command": "liquidate",  "description": "전액 청산 (확인 필요)"},
-    {"command": "universe",    "description": "코인 유니버스 (스캔 목록·점수)"},
-    {"command": "help",            "description": "도움말"},
+    {"command": "universe",         "description": "코인 유니버스 (스캔 목록·점수)"},
+    {"command": "restart_claude",   "description": "Claude 리모트 세션 재시작 (확인 필요)"},
+    {"command": "help",             "description": "도움말"},
 ]
 
 
@@ -522,6 +525,12 @@ def _handle_command(cmd: str, arg: str | None = None):
         reply("⚠️ <b>전액 청산 확인</b>\n모든 보유 포지션을 시장가로 즉시 매도합니다.\n"
               f"계속하려면 {_CONFIRM_TTL}초 내에 /confirm 을 입력하세요.")
 
+    elif cmd == "/restart_claude":
+        _set_pending("restart_claude")
+        reply("⚠️ <b>Claude 리모트 세션 재시작 확인</b>\n"
+              "VPS의 claude-remote 세션을 재시작합니다. (진행 중 작업·대화 맥락은 사라집니다)\n"
+              f"계속하려면 {_CONFIRM_TTL}초 내에 /confirm 을 입력하세요.")
+
     elif cmd == "/confirm":
         action = _take_pending()
         if action is None:
@@ -534,6 +543,20 @@ def _handle_command(cmd: str, arg: str | None = None):
             result = trading_control.stop_trading(mode="liquidate")
             if not result.get("ok"):
                 reply(f"⚠️ {html.escape(result.get('error', '청산 실패'))}")
+        elif action == "restart_claude":
+            try:
+                proc = subprocess.run(
+                    ["bash", "/home/ubuntu/upbit-bot/deploy/restart-claude.sh"],
+                    capture_output=True, text=True, timeout=30,
+                )
+                if proc.returncode == 0:
+                    reply("♻️ claude-remote 세션을 재시작했습니다. 잠시 후 Claude 앱에서 다시 연결하세요.")
+                else:
+                    err = (proc.stderr or proc.stdout or "알 수 없는 오류").strip()
+                    reply(f"⚠️ 재시작 실패 (code {proc.returncode}): {html.escape(err[:200])}")
+            except Exception as e:
+                logging.exception("claude-remote 재시작 오류")
+                reply(f"⚠️ 재시작 오류: {html.escape(str(e)[:150])}")
 
     elif cmd == "/universe":
         try:
