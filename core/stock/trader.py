@@ -132,21 +132,24 @@ def _load_state():
 
 
 def _stock_market_notifier():
-    """장 시작(09:00) 알림 전용 데몬. 시뮬 상태와 무관하게 항상 동작."""
+    """장 시작(09:00) 자동 시작 + 장 마감 감지 데몬. 시뮬 상태와 무관하게 항상 동작."""
     market_was_open = False
     while True:
         try:
             market_now = is_market_hours()
             if market_now and not market_was_open:
                 market_was_open = True
-                notifier.send_stock(
-                    "<b>🔔 장 시작</b> — 평일 09:00 KST\n"
-                    "/start_sim 으로 주식 시뮬을 시작하세요."
-                )
+                with _stock_lock:
+                    already_running = _stock_trading_state["enabled"]
+                if not already_running:
+                    result = start_stock_trading()
+                    logging.info("장 시작 자동 시작: %s", result)
+                    if result.startswith("⚠️"):
+                        notifier.send_stock(f"<b>주식 자동 시작 실패</b>\n{html.escape(result)}")
             elif not market_now and market_was_open:
                 market_was_open = False
         except Exception:
-            logging.exception("장 시작 알림 워커 오류")
+            logging.exception("장 시작 자동 시작 오류")
         time.sleep(30)
 
 
@@ -469,6 +472,9 @@ def _stock_worker():
                 _empty = max(1, config.STOCK_MAX_POSITIONS - cur_positions)
                 _slot_budget = sim_krw / _empty
                 universe = get_dynamic_universe(client, _slot_budget, limit=30)
+                logging.info("진입 스캔: 슬롯 %d/%d, 예산 %.0f원, %d종목 대상",
+                             cur_positions, config.STOCK_MAX_POSITIONS, sim_krw, len(universe))
+                buy_count = 0
                 for code, name in universe:
                     with _stock_lock:
                         if not _stock_trading_state["enabled"]:
@@ -494,9 +500,11 @@ def _stock_worker():
                     empty_slots = max(1, config.STOCK_MAX_POSITIONS - cur_positions)
                     price_cap = sim_krw / empty_slots
                     if latest_close <= 0 or latest_close > price_cap:
+                        logging.debug("스킵(%s %s): 종가 %.0f > 예산상한 %.0f", code, name, latest_close, price_cap)
                         continue
 
                     if sc < config.STOCK_BUY_SCORE_THRESHOLD:
+                        logging.info("스킵(%s %s): 점수 %.1f < %.0f", code, name, sc, config.STOCK_BUY_SCORE_THRESHOLD)
                         continue
 
                     try:
@@ -512,7 +520,9 @@ def _stock_worker():
                     if prev_close > 0:
                         daily_change_pct = (current_price / prev_close - 1) * 100
                         if not (config.STOCK_ENTRY_CHANGE_MIN <= daily_change_pct <= config.STOCK_ENTRY_CHANGE_MAX):
-                            logging.debug("등락률 필터: %s %.1f%%", code, daily_change_pct)
+                            logging.info("스킵(%s %s): 등락률 %.1f%% (허용범위 %.1f%%~%.1f%%)",
+                                         code, name, daily_change_pct,
+                                         config.STOCK_ENTRY_CHANGE_MIN, config.STOCK_ENTRY_CHANGE_MAX)
                             continue
 
                     with _stock_lock:
@@ -525,9 +535,11 @@ def _stock_worker():
 
                     quantity = math.floor(slot_budget / current_price)
                     if quantity <= 0:
+                        logging.info("스킵(%s %s): 수량 0 (슬롯예산 %.0f / 현재가 %.0f)", code, name, slot_budget, current_price)
                         continue
                     cost = quantity * current_price * (1 + FEE_RATE)
                     if cost > sim_krw:
+                        logging.info("스킵(%s %s): 비용 %.0f > 잔고 %.0f", code, name, cost, sim_krw)
                         continue
 
                     ts = datetime.now(_KST)
@@ -561,6 +573,9 @@ def _stock_worker():
                         f"금액: {cost:,.0f}원  점수: {sc:.1f}"
                     )
                     logging.info("주식 매수: %s %s score=%.1f", code, name, sc)
+                    buy_count += 1
+
+                logging.info("진입 스캔 완료: %d종목 중 %d건 매수", len(universe), buy_count)
 
             # ─── 추가매수 Phase ───
             if config.STOCK_ADD_BUY_ENABLED and not buy_cutoff:
