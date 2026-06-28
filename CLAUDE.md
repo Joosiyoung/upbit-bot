@@ -128,7 +128,7 @@ core/
   ai_analysis.py        # Fear & Greed 조회·캐시 워커
   sheets_client.py      # Google Sheets 실시간 거래 적재 (코인·국내주식, 오프라인 버퍼링)
   stock/
-    trader.py           # 국내 주식 시뮬 매매 로직 + _stock_market_notifier(장 시작 알림 데몬)
+    trader.py           # 국내 주식 시뮬 매매 로직 + _stock_market_notifier(장 시작 자동 시작·알림 데몬)
     trading_control.py  # 국내 주식 시작/중지/상태 (Flask ↔ Telegram 공용)
     kis_auth.py         # KIS OAuth2 토큰 관리
     kis_client.py       # KIS API 래퍼 (국내 OHLCV·현재가·거래량순위)
@@ -238,7 +238,7 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 - **Sheets "주식" 시트** — 국내주식 16컬럼(`_STOCK_HEADERS`)으로 운영. 코인·국내주식 2개 시트 + 테이블정의서. 국내주식 Sheets 로깅 활성(`trader._log_trade`).
 - **주식 봇 Telegram 명령** — 현재 9개 활성 (`/start_sim`, `/stop`, `/status`, `/perf`, `/positions`, `/history`, `/params`, `/market`, `/help`). 모두 국내주식 전용.
 - **트레일링 비활성 방식** — `STOCK_TRAILING_START_PCT=9999`로 트레일링 분기가 절대 발동하지 않게 설정만으로 OFF (trader.py 로직 무변경). 재활성화 시 값을 정상 범위(예: 3.0)로 되돌리면 됨.
-- **`_stock_market_notifier` 기동** — `app.py`에서 국내주식 장 시작(09:00) 알림 스레드 기동. 시뮬 상태와 무관하게 항상 동작.
+- **`_stock_market_notifier` 기동** — `app.py`에서 국내주식 장 시작(09:00) 알림 스레드 기동. 시뮬 상태와 무관하게 항상 동작. 2026-06-24부터 장 시작 감지 시 `start_stock_trading()` 자동 호출 포함 (이미 실행 중이면 skip).
 - **프로젝트 서브에이전트 미등록 가능성** — 일부 런타임 세션(예: VPS Remote Control)에서 `.claude/agents/`의 coder·tester·pm·deployer 등이 Agent 툴 `subagent_type`으로 로드되지 않을 수 있다(빌트인만 노출). 정의 파일·설정은 정상인데 세션 레벨 미등록 문제. `'coder' not found. Available agents: claude, ...` 에러로 나타남. 복구: 프로젝트 디렉터리에서 세션 재시작. 그래도 안 되면 메인이 coder→tester→pm→deployer 역할을 직접 대행(구현+구문/임포트/스모크 검사+체크리스트+배포)한다(2026-06-17 실제 발생). `/restart_claude` Telegram 명령으로 폰에서 세션 재시작 가능(2026-06-22).
 - **`ANTHROPIC_API_KEY` 프롬프트 차단** — `.env`에 `ANTHROPIC_API_KEY`가 환경에 있으면 새 `claude --remote-control` 기동 시 "이 키 사용할까요?" 대화형 프롬프트에서 멈춰 리모트 컨트롤이 뜨지 않는다. 해결: `restart-claude.sh` 기동 명령에 `unset ANTHROPIC_API_KEY` 포함(Remote Control은 Claude Pro 로그인으로 동작, API 키 불필요). 한 번 "No" 응답이 `~/.claude.json` `customApiKeyResponses.rejected`에 영구저장됨.
 - **deploy/*.sh 실행권한 git 추적** — Windows에서 커밋 시 `.sh` 실행 비트가 유실되어 리포에 100644로 저장됨. VPS에서 pull마다 +x가 사라져 watchdog cron(직접 실행)이 `Permission denied`로 silent fail. 해결: `git update-index --chmod=+x deploy/restart-claude.sh deploy/claude-remote-watchdog.sh`로 100755 기록 → pull해도 +x 유지.
@@ -297,6 +297,11 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 2026-06-17 | 인프라 | 서브에이전트(`.claude/agents/`)가 이 세션 Agent 툴에 미등록 → coder/tester/pm/deployer 호출 불가. 정의·설정 정상, 세션 레벨 문제. 메인이 파이프라인 전 단계 직접 대행하여 배포 완료 (gotcha 추가) |
 | 2026-06-22 | 코인 | **파라미터 재튜닝(알트 유니버스 적합)** — 익절 5→6%, 손절 3→4%, 트레일링 OFF(`TRAILING_START_PCT=9999`), 임계치 12·보유 48h 유지. 라이브 로그(6/12~6/22, 140건) 분석 결과 봇이 매매하는 알트 유니버스가 백테스트 검증 대상(대형주)과 불일치 → 실제 알트 10종 백테스트(90일+12일 교차검증)에서 TP6/SL4/trailOFF가 두 레짐 모두 우위(12일 기대값 +0.075%→+0.271%). 트레일링은 +5% 익절 도달을 100% 차단(승자 조기절단)하여 OFF. 상세 `draft/coin_strategy_review_2026-06-22.md` |
 | 2026-06-22 | 인프라 | **폰 Remote Control 운영 체계 구축** — `/restart_claude` Telegram 명령 신설(코인봇, 2단계 `/confirm` 패턴, chat_id 인증). `deploy/restart-claude.sh`(세션 kill+재기동, `unset ANTHROPIC_API_KEY` 포함)·`deploy/claude-remote-watchdog.sh`(멱등 기동, cron `@reboot`+`*/5`) 신규. `.sh` 실행권한 `git update-index --chmod=+x`로 100755 git 추적. 코인봇 명령 12→13개 |
+| 2026-06-24 | 주식 | feat(stock): 장 자동 시작 — `_stock_market_notifier`에서 09:00 장 시작 감지 시 `start_stock_trading()` 자동 호출. 이미 실행 중이면 skip, 실패 시 Telegram 알림. 수동 `/start_sim` 불필요 |
+| 2026-06-24 | 주식 | feat(stock): 진입 스캔 진단 로깅 — 스캔 시작(슬롯/예산/종목 수), 종목별 스킵 이유(점수미달 INFO / 가격초과 DEBUG / 등락률 INFO / 수량0 INFO / 비용초과 INFO), 스캔 완료(N종목 중 M건 매수) 로깅 추가 |
+| 2026-06-25 | 주식 | 장애 분석 — KIS 거래량순위 API 404 상시 발생, FALLBACK_UNIVERSE(19종목) 폴백 정상 동작. 매수 0건 원인: FALLBACK_UNIVERSE 종목 전체 점수 미달(최고 신한지주 +7.5, 임계치 12). KOSPI 약세장에서 방어주 유니버스가 임계치 미달 구조 확인 |
+| 2026-06-25 | 코인 | 손익 현황 점검 — 2026-06-12~06-25 176건 청산. 승률 44.9%(79승 97패), 순손익 -9,223,117원. 손절(79건) : 익절(33건) = 2.4:1. 총 평가액 95,678,218원 / 초기 100M → -4.32% |
+| 2026-06-25 | 인프라 | Upbit API Rate Limit 변경 확인 (2026-06-25): 계정 단위 → 포켓 단위. 단일 포켓 운영 중인 봇에는 영향 없음 |
 
 ## VPS 인프라
 

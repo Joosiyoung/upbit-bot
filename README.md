@@ -48,7 +48,7 @@ core/
   ai_analysis.py         # Fear & Greed 조회·캐시 워커
   sheets_client.py       # Google Sheets 실시간 거래 적재 (코인·국내주식, 오프라인 버퍼링)
   stock/                 # 국내주식 자동매매 모듈 (KIS API)
-    trader.py            # 국내 주식 시뮬 매매 로직 + _stock_market_notifier(장 시작 알림 데몬)
+    trader.py            # 국내 주식 시뮬 매매 로직 + _stock_market_notifier(장 시작 자동 시작·알림 데몬)
     trading_control.py   # 국내 주식 시작/중지/상태 (Flask ↔ Telegram 공용)
     kis_auth.py          # KIS OAuth2 토큰 관리
     kis_client.py        # KIS API 래퍼 (국내 OHLCV·현재가·거래량순위)
@@ -195,7 +195,7 @@ logs/
 
 | 명령 | 동작 |
 |------|------|
-| `/start_sim [금액]` | 주식 시뮬 시작. 금액(원화) 미입력 시 `STOCK_SIM_BUDGET` 기본값(100만원) 사용. 장 외 시간이면 거부 |
+| `/start_sim [금액]` | 주식 시뮬 시작. 금액(원화) 미입력 시 `STOCK_SIM_BUDGET` 기본값(100만원) 사용. 장 외 시간이면 거부. **09:00 장 시작 시 자동 호출되므로 수동 실행 불필요** |
 | `/stop` | 주식 시뮬 중지 (보유 포지션 유지) |
 | `/status` | 시뮬 상태·잔고·포지션 요약 |
 | `/perf` | 누적 성과 조회 (승률·평균수익률) |
@@ -204,7 +204,7 @@ logs/
 | `/params` | 현재 적용 주식 파라미터 조회 |
 | `/market` | 국내 장 현황 (개장/폐장 여부) |
 | `/help` | 명령어 목록 |
-| (자동) 매일 09:00 KST | 국내 장 시작 Telegram 알림 (`_stock_market_notifier`, 시뮬 여부 무관) |
+| (자동) 매일 09:00 KST | 국내 장 시작 Telegram 알림 + 주식 시뮬 자동 시작 (`_stock_market_notifier`, 시뮬 여부 무관하게 항상 동작) |
 
 ---
 
