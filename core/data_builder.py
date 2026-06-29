@@ -29,6 +29,12 @@ _cache = {"status": "initializing", "updated_at": None, "holdings": [], "krw_bal
 _market_lock = threading.Lock()
 _market_cache = {"status": "initializing", "updated_at": None, "coins": []}
 
+# 스테이블코인 — 거래량 상위에 포함되더라도 추세 매매 불가이므로 제외
+_STABLE_COINS = {
+    "KRW-USDT", "KRW-USDC", "KRW-DAI", "KRW-BUSD", "KRW-TUSD",
+    "KRW-USDP", "KRW-USDS", "KRW-FDUSD",
+}
+
 MARKET_COINS = [
     ("KRW-BTC",  "비트코인"),
     ("KRW-ETH",  "이더리움"),
@@ -225,13 +231,13 @@ def get_top_volume_tickers(held_tickers: set, limit: int = 20) -> list[tuple[str
                 ticker_data.extend(resp.json())
             time.sleep(0.1)
 
-        # 24시간 거래대금 기준 정렬, 보유 코인 제외
+        # 24시간 거래대금 기준 정렬, 보유 코인·스테이블코인 제외
         ticker_data.sort(key=lambda x: x.get("acc_trade_price_24h", 0), reverse=True)
 
         result = []
         for item in ticker_data:
             market = item["market"]
-            if market in held_tickers:
+            if market in held_tickers or market in _STABLE_COINS:
                 continue
             coin = market.replace("KRW-", "")
             result.append((market, coin))

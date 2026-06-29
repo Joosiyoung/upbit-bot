@@ -70,8 +70,12 @@ _sell_cooldown: dict[str, datetime] = {}   # ticker → 매도 시각
 _buy_fail: dict[str, dict] = {}            # ticker → {"count": int, "until": datetime|None}
 _buy_confirm: dict[str, int] = {}          # ticker → 연속 score≥임계치 사이클 수 (진입 디바운스용)
 
-# 자동 매매 절대 제외 코인 (보유 중이므로 매수·매도 금지)
-TRADING_BLACKLIST = {"KRW-XRP", "KRW-CRO", "KRW-RVN"}
+# 자동 매매 절대 제외 코인 (보유 중 개인분 + 스테이블코인)
+TRADING_BLACKLIST = {
+    "KRW-XRP", "KRW-CRO", "KRW-RVN",  # 개인 보유분
+    "KRW-USDT", "KRW-USDC", "KRW-DAI", "KRW-BUSD", "KRW-TUSD",
+    "KRW-USDP", "KRW-USDS", "KRW-FDUSD",  # 스테이블코인
+}
 
 _MAX_LOG = 50
 
