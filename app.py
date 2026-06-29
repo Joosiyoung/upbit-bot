@@ -97,12 +97,17 @@ def start_workers():
     start_telegram_bot()
 
     # 주식 상태 복원 (재시작 시 이전 포지션 유지)
-    from core.stock.trader import _load_state as _load_stock_state, _stock_trading_state
+    from core.stock.trader import _load_state as _load_stock_state, _stock_trading_state, _stock_positions
     _load_stock_state()
     if _stock_trading_state.get("enabled"):
-        from core.stock.trader import _stock_worker
-        t = threading.Thread(target=_stock_worker, daemon=True, name="stock-worker")
-        t.start()
+        if _stock_positions:
+            from core.stock.trader import _stock_worker
+            t = threading.Thread(target=_stock_worker, daemon=True, name="stock-worker")
+            t.start()
+        else:
+            _stock_trading_state["enabled"] = False
+            from core.stock.trader import _save_state as _save_stock_state
+            _save_stock_state()
 
     # 국내주식 장 시작(09:00) 알림 데몬 — 시뮬 상태와 무관하게 항상 동작
     from core.stock.trader import _stock_market_notifier
