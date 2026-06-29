@@ -132,7 +132,7 @@ core/
     trading_control.py  # 국내 주식 시작/중지/상태 (Flask ↔ Telegram 공용)
     kis_auth.py         # KIS OAuth2 토큰 관리
     kis_client.py       # KIS API 래퍼 (국내 OHLCV·현재가·거래량순위)
-    universe.py         # 국내 매매 대상 종목 풀 (KOSPI 대형주 19종목, KB금융 제외)
+    universe.py         # 국내 매매 대상 종목 풀 (KOSPI 추세섹터 18종목)
 scripts/
   backtest.py           # 코인 백테스터
   stock_backtest.py     # 주식 백테스터 (KIS OHLCV → score_signal × 2.5)
@@ -208,7 +208,8 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 2. 시장 레짐 필터 (BTC 단기EMA < 중기EMA) — 시뮬 바이패스
 3. F&G 극단값 (≥80 또는 ≤20) — 시뮬 바이패스
 4. 시장 캐시 노후 (>180초)
-5. 진입 점수 < BUY_SCORE_THRESHOLD
+5. 스테이블코인(`_STABLE_COINS`) 또는 `TRADING_BLACKLIST` 종목 — 유니버스 스캔 시 필터링 (USDT·USDC 등 8종)
+6. 진입 점수 < BUY_SCORE_THRESHOLD
 
 **국내주식**
 1. 장 외 시간 — `is_market_hours()` False 시 워커 비활성
@@ -234,7 +235,7 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 - **`_daily_signal_cache` 단일 워커 전용** — `_stock_worker` 외 다른 스레드에서 접근 금지. 락 없이 설계됨.
 - **`settings.json` VPS 미동기화 (의도적)** — Windows 전용 경로·명령(taskkill, powershell, cmd.exe 등) 포함. `.claude/*` gitignore로 제외됨. VPS는 Remote Control 최초 실행 시 자체 Linux 설정 자동 생성.
 - **`build_stock_status_msg` 현재가 조회** — `get_current_price()`는 예외를 던지지 않고 None 반환. `try/except` 사용 금지. `if not price: price = entry_price` 패턴 사용. None 반환 시 진입가를 fallback으로 표시하고 `(진입가)` suffix 추가.
-- **KIS sandbox 상시 500 오류 종목** — `universe.py`에서 KB금융(105560) 제거됨. KIS sandbox 환경에서 해당 종목 조회 시 항상 500 에러 반환 → 유니버스 19종목으로 고정.
+- **KIS sandbox 상시 500 오류 종목** — `universe.py`에서 KB금융(105560) 제거됨. KIS sandbox 환경에서 해당 종목 조회 시 항상 500 에러 반환. 이후 2026-06-29 방어주 19종 → 추세섹터 18종으로 전면 교체.
 - **Sheets "주식" 시트** — 국내주식 16컬럼(`_STOCK_HEADERS`)으로 운영. 코인·국내주식 2개 시트 + 테이블정의서. 국내주식 Sheets 로깅 활성(`trader._log_trade`).
 - **주식 봇 Telegram 명령** — 현재 9개 활성 (`/start_sim`, `/stop`, `/status`, `/perf`, `/positions`, `/history`, `/params`, `/market`, `/help`). 모두 국내주식 전용.
 - **트레일링 비활성 방식** — `STOCK_TRAILING_START_PCT=9999`로 트레일링 분기가 절대 발동하지 않게 설정만으로 OFF (trader.py 로직 무변경). 재활성화 시 값을 정상 범위(예: 3.0)로 되돌리면 됨.
@@ -302,6 +303,13 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 2026-06-25 | 주식 | 장애 분석 — KIS 거래량순위 API 404 상시 발생, FALLBACK_UNIVERSE(19종목) 폴백 정상 동작. 매수 0건 원인: FALLBACK_UNIVERSE 종목 전체 점수 미달(최고 신한지주 +7.5, 임계치 12). KOSPI 약세장에서 방어주 유니버스가 임계치 미달 구조 확인 |
 | 2026-06-25 | 코인 | 손익 현황 점검 — 2026-06-12~06-25 176건 청산. 승률 44.9%(79승 97패), 순손익 -9,223,117원. 손절(79건) : 익절(33건) = 2.4:1. 총 평가액 95,678,218원 / 초기 100M → -4.32% |
 | 2026-06-25 | 인프라 | Upbit API Rate Limit 변경 확인 (2026-06-25): 계정 단위 → 포켓 단위. 단일 포켓 운영 중인 봇에는 영향 없음 |
+| 2026-06-28 | 코인 | **주말 전략 분석(log-analyzer)**: 6/12~6/25 212건 청산 분석. 승률 46.2%, EV -0.418%. 손절 102 : 익절 41 = 2.5:1. USDT 14회 슬롯 점유 버그 발견 |
+| 2026-06-28 | 코인 | **스테이블코인 제외**: `data_builder.py` `_STABLE_COINS` 필터 + `trader.py` `TRADING_BLACKLIST` 확장 (USDT·USDC 등 8종) 배포 (`8df38d1`) |
+| 2026-06-28 | 코인 | **param-optimizer**: 90~180일 96조합 스윕 → 전 조합 기대값 음수. 현 파라미터(TP6/SL4/임계치12) 유지. 신호 자체 재설계 필요 판단 |
+| 2026-06-28 | 주식 | **stock-log-analyzer**: FALLBACK_UNIVERSE(방어주 19종) 추세추종 전략과 구조적 미스매치 확인. 전 종목 임계치 12 미달 (최고 신한지주 7.5) |
+| 2026-06-28 | 주식 | **stock-param-optimizer**: 90일 스윕에서 삼성전자·SK하이닉스 등 추세섹터 종목 일부 양수 기대값 확인 |
+| 2026-06-29 | 주식 | **유니버스 교체 + 예산 상향**: `FALLBACK_UNIVERSE` 방어주 19종 → 추세섹터(반도체·2차전지·방산·자동차·바이오·플랫폼·조선·철강·엔터·반도체장비) 18종. `STOCK_SIM_BUDGET` 100만 → 500만원 배포 (`f3973de`) |
+| 2026-06-29 | 인프라 | **app.py 재시작 복원 버그 수정**: `enabled:true` + 포지션 없음 상태로 재시작 시 워커 직접기동 → 주말 스캔·예산 미초기화 문제. 포지션 없으면 `enabled:false` 리셋 후 장 시작 시 notifier가 정상 초기화하도록 수정 배포 (`40072c9`) |
 
 ## VPS 인프라
 
