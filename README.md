@@ -52,7 +52,7 @@ core/
     trading_control.py   # 국내 주식 시작/중지/상태 (Flask ↔ Telegram 공용)
     kis_auth.py          # KIS OAuth2 토큰 관리
     kis_client.py        # KIS API 래퍼 (국내 OHLCV·현재가·거래량순위)
-    universe.py          # 국내 매매 대상 종목 풀 (KOSPI 대형주 19종목)
+    universe.py          # 국내 매매 대상 종목 풀 (KOSPI 추세섹터 18종목)
 scripts/
   backtest.py            # 백테스터 (라이브 룰 동일 재현)
   stock_backtest.py      # 주식 백테스터 (KIS OHLCV → score_signal)
@@ -195,7 +195,7 @@ logs/
 
 | 명령 | 동작 |
 |------|------|
-| `/start_sim [금액]` | 주식 시뮬 시작. 금액(원화) 미입력 시 `STOCK_SIM_BUDGET` 기본값(100만원) 사용. 장 외 시간이면 거부. **09:00 장 시작 시 자동 호출되므로 수동 실행 불필요** |
+| `/start_sim [금액]` | 주식 시뮬 시작. 금액(원화) 미입력 시 `STOCK_SIM_BUDGET` 기본값(500만원) 사용. 장 외 시간이면 거부. **09:00 장 시작 시 자동 호출되므로 수동 실행 불필요** |
 | `/stop` | 주식 시뮬 중지 (보유 포지션 유지) |
 | `/status` | 시뮬 상태·잔고·포지션 요약 |
 | `/perf` | 누적 성과 조회 (승률·평균수익률) |
