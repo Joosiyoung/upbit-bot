@@ -96,6 +96,14 @@ LOG_RETENTION_DAYS = int(os.getenv("LOG_RETENTION_DAYS", "35"))
 # 0으로 두면 영구 보존(정리 안 함).
 TRADE_HISTORY_RETENTION_DAYS = int(os.getenv("TRADE_HISTORY_RETENTION_DAYS", "365"))
 
+# ─── 스테이블코인 (공용) ───
+# 거래량 상위에 포함되더라도 추세 매매 불가 → 유니버스 스캔·신규 매수 후보에서 제외.
+# data_builder.py(유니버스 필터)와 trader.py(TRADING_BLACKLIST)가 공유하는 단일 소스.
+STABLE_COINS = {
+    "KRW-USDT", "KRW-USDC", "KRW-DAI", "KRW-BUSD", "KRW-TUSD",
+    "KRW-USDP", "KRW-USDS", "KRW-FDUSD",
+}
+
 # 기술적 지표 파라미터
 RSI_PERIOD = 14
 

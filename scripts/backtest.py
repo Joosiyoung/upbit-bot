@@ -86,7 +86,73 @@ def row_to_ind(df: pd.DataFrame, i: int) -> dict:
         "ema_long": last.get("ema_long", 0),
         "stoch_k": last.get("stoch_k", 50),
         "volume_ratio": last.get("volume_ratio", 1.0),
+        "atr_pct": last.get("atr_pct", 0.0),
+        "pullback_pct": last.get("pullback_pct", 0.0),
     }
+
+
+# ─────────────────────────────────────────────
+# 실험용 score_signal 래퍼 (draft/coin_signal_redesign_spec_2026-07-02.md 실험 1·2)
+# core.analysis.score_signal은 수정하지 않는다. bb_mode="current"·min_atr_pct=0.0
+# (둘 다 기본값)이면 score_signal(ind)과 완전히 동일한 값을 반환한다(회귀 없음).
+# ─────────────────────────────────────────────
+
+def score_signal_experimental(ind: dict, bb_mode: str = "current", min_atr_pct: float = 0.0) -> float:
+    if bb_mode == "current":
+        score = score_signal(ind)
+    elif bb_mode in ("flip", "off"):
+        # score_signal 본체 로직 복제(BB 블록만 교체) -- 일회성 실험 스크립트라 중복 허용
+        es, em, el = ind['ema_short'], ind['ema_mid'], ind['ema_long']
+        rsi = ind['rsi']
+        hist = ind['macd_hist']
+        prev = ind['prev_macd_hist']
+        bb_pct = ind['bb_pct']
+        sk = ind['stoch_k']
+        vol = ind.get('volume_ratio', 1.0)
+
+        bullish = es > em > el
+        bearish = es < em < el
+
+        score = 0
+        if bullish:   score += 2
+        elif bearish: score -= 2
+
+        if prev < 0 and hist > 0:        score += 3
+        elif prev > 0 and hist < 0:      score -= 3
+        elif hist > 0 and hist > prev:   score += 2
+        elif hist < 0 and hist < prev:   score -= 2
+
+        if bullish:
+            if 40 <= rsi <= 60:  score += 2
+            elif rsi < 40:       score += 1
+            elif rsi > 78:       score -= 1
+        else:
+            if rsi > 70:   score -= 2
+            elif rsi > 60: score -= 1
+
+        if bb_mode == "flip":
+            if bullish:
+                if bb_pct <= 0.25:   score += 1    # 상승추세 밴드 하단 눌림 = 진입 기회
+                elif bb_pct >= 0.95: score -= 1    # 밴드 상단 과열 = 추격 회피
+            else:
+                if bb_pct >= 1.0:    score -= 2
+                elif bb_pct >= 0.8:  score -= 1
+        # bb_mode == "off": BB 블록 완전 생략
+
+        if bullish and sk < 40:  score += 1
+        elif sk > 85:            score -= 1
+
+        if vol >= 2.0:
+            if score > 0:   score += 1
+            elif score < 0: score -= 1
+    else:
+        raise ValueError(f"알 수 없는 bb_mode: {bb_mode}")
+
+    atr_pct = ind.get('atr_pct', 999)
+    if atr_pct < min_atr_pct:
+        return -999   # 변동성 미달 -- 진입 원천 차단(청산 판정에는 미사용)
+
+    return score
 
 
 # ─────────────────────────────────────────────
@@ -116,7 +182,8 @@ def build_market_regime(days: int) -> list:
 
 def backtest_ticker(ticker: str, days: int, threshold: float, confirm: int,
                     intrabar: bool, verbose: bool, no_signal_exit: bool = False,
-                    regime_gate: bool = False) -> dict:
+                    regime_gate: bool = False, bb_mode: str = "current",
+                    min_atr_pct: float = 0.0) -> dict:
     hourly = fetch_ohlcv(ticker, "minute60", days * 24)
     daily  = fetch_ohlcv(ticker, "day", max(220, days + 60))
     if hourly.empty or daily.empty or len(hourly) < 60:
@@ -128,7 +195,7 @@ def backtest_ticker(ticker: str, days: int, threshold: float, confirm: int,
     # 완성된 일봉별 점수 (date → sc_1d)
     daily_scores = []  # (date, sc)
     for i in range(len(daily)):
-        sc = score_signal(row_to_ind(daily, i))
+        sc = score_signal_experimental(row_to_ind(daily, i), bb_mode=bb_mode, min_atr_pct=min_atr_pct)
         daily_scores.append((daily.index[i].date(), sc))
 
     def daily_score_before(d):
@@ -169,7 +236,7 @@ def backtest_ticker(ticker: str, days: int, threshold: float, confirm: int,
     for i in range(warmup, len(hourly)):
         ts = hourly.index[i]
         close = float(hourly["close"].iloc[i])
-        sc_1h = score_signal(row_to_ind(hourly, i))
+        sc_1h = score_signal_experimental(row_to_ind(hourly, i), bb_mode=bb_mode, min_atr_pct=min_atr_pct)
         sc_1d = daily_score_before(ts.date())
         total = sc_1d * 2.5 + sc_1h * 2.0   # 1m 항목 생략(가중치 0.5)
         _, action_class = action_from_score(total)
@@ -295,13 +362,17 @@ def main():
                     help="신호반전(sell-strong) 청산 비활성화 -- 추세추종 진입의 휩쏘 청산 영향 측정용")
     ap.add_argument("--regime-gate", action="store_true",
                     help="시장 레짐 필터: BTC 일봉 하락 추세 구간 신규 진입 차단")
+    ap.add_argument("--bb-mode", choices=["current", "flip", "off"], default="current",
+                    help="볼린저밴드 점수 로직 실험(실험 1): current=현행, flip=눌림목 매수형, off=BB 미반영")
+    ap.add_argument("--min-atr", type=float, default=0.0,
+                    help="변동성 하한 게이트(실험 2): atr_pct 미달 종목 진입 차단. 0=비활성(기본, 회귀 없음)")
     ap.add_argument("--verbose", action="store_true", help="개별 트레이드 출력")
     args = ap.parse_args()
 
     tickers = [t.strip() for t in args.tickers.split(",") if t.strip()]
     print(f"\n백테스트 시작 -- {len(tickers)}종목, {args.days}일, "
           f"threshold={args.threshold}, confirm={args.confirm}, "
-          f"intrabar={args.intrabar}")
+          f"intrabar={args.intrabar}, bb_mode={args.bb_mode}, min_atr={args.min_atr}")
     print(f"청산 룰: 익절 +{config.TAKE_PROFIT_PERCENT}% / 손절 -{config.MAX_LOSS_PERCENT}% / "
           f"트레일링 {config.TRAILING_START_PCT}·{config.TRAILING_STOP_PCT}% / "
           f"time-stop {config.MAX_HOLD_HOURS:.0f}h / 수수료 왕복 {FEE_RATE*2*100:.2f}%")
@@ -313,7 +384,7 @@ def main():
     for tk in tickers:
         res = backtest_ticker(tk, args.days, args.threshold, args.confirm,
                               args.intrabar, args.verbose, args.no_signal_exit,
-                              args.regime_gate)
+                              args.regime_gate, args.bb_mode, args.min_atr)
         if res.get("skipped"):
             print(f"  {tk:12s} 스킵 ({res['skipped']})")
             continue

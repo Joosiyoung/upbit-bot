@@ -29,11 +29,8 @@ _cache = {"status": "initializing", "updated_at": None, "holdings": [], "krw_bal
 _market_lock = threading.Lock()
 _market_cache = {"status": "initializing", "updated_at": None, "coins": []}
 
-# 스테이블코인 — 거래량 상위에 포함되더라도 추세 매매 불가이므로 제외
-_STABLE_COINS = {
-    "KRW-USDT", "KRW-USDC", "KRW-DAI", "KRW-BUSD", "KRW-TUSD",
-    "KRW-USDP", "KRW-USDS", "KRW-FDUSD",
-}
+# 스테이블코인 — 거래량 상위에 포함되더라도 추세 매매 불가이므로 제외 (단일 소스: config.STABLE_COINS)
+_STABLE_COINS = config.STABLE_COINS
 
 MARKET_COINS = [
     ("KRW-BTC",  "비트코인"),
@@ -73,6 +70,7 @@ def _neutral_indicators() -> dict:
         'ema_short': 1.0, 'ema_mid': 1.0, 'ema_long': 1.0,
         'volume_ratio': 1.0, 'stoch_k': 50.0, 'stoch_d': 50.0,
         'price_change_pct': 0.0, 'close': 0.0, 'volume': 0.0,
+        'atr_pct': 0.0, 'pullback_pct': 0.0,
     }
 
 
@@ -150,7 +148,7 @@ def build_analysis_data():
             }
             time.sleep(0.1)  # API rate limit 방어
 
-        # 가중 합산 점수 (진입 스캔과 동일한 가중치 체계: 일봉 2.5·중기 2·단기 0.5)
+        # 가중 합산 점수 (진입 스캔과 가중치 "비율"은 동일: 일봉 2.5·중기 2·단기 0.5. 단 진입 스캔(build_market_data)은 4시간봉·1시간봉 대신 1시간봉·1분봉을 사용 — 타임프레임 자체는 다름)
         total_score = (
             scores.get('day', 0) * 2.5 +
             scores.get('minute240', 0) * 2 +
@@ -334,6 +332,9 @@ def build_market_data():
                 "rsi_class_1d":  rsi_class(ind_1d['rsi']),
                 "trend_1d":      trend_label(ind_1d['ema_short'], ind_1d['ema_mid'], ind_1d['ema_long']),
                 "trend_class_1d":trend_class(ind_1d['ema_short'], ind_1d['ema_mid'], ind_1d['ema_long']),
+                "bb_pct_1d":       round(ind_1d['bb_pct'] * 100, 1),
+                "atr_pct_1d":      round(ind_1d.get('atr_pct', 0.0), 2),
+                "pullback_pct_1d": round(ind_1d.get('pullback_pct', 0.0), 2),
                 # 지지/저항 (1시간봉)
                 "support":       round(sup_1h, 2),
                 "resistance":    round(res_1h, 2),

@@ -118,8 +118,8 @@ class KisClient:
                 break
             frames.append(df)
             collected += len(df)
-            # 다음 페이지: 현재 배치의 가장 오래된 날짜 하루 전
-            oldest = df.index[0]
+            # 다음 페이지: 현재 배치의 가장 오래된 날짜 하루 전 (KIS는 내림차순 응답이라 df.index[0]이 아닌 min() 필요)
+            oldest = df.index.min()
             end_date = (oldest - timedelta(days=1)).strftime("%Y%m%d")
             if len(rows) < 100:
                 break
@@ -169,7 +169,7 @@ class KisClient:
                 break
             frames.append(df)
             collected += len(df)
-            oldest = df.index[0]
+            oldest = df.index.min()
             end_time = oldest.strftime("%H%M%S")
             if len(rows) < 30:
                 break

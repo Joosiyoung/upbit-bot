@@ -59,6 +59,18 @@ def calculate_volume_ratio(df: pd.DataFrame, period: int = 20) -> pd.Series:
     return (df["volume"] / avg_volume.replace(0, np.nan)).fillna(1.0)
 
 
+def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    """ATR (Average True Range) 계산. 반환: ATR 절대값 Series."""
+    high, low, close = df["high"], df["low"], df["close"]
+    prev_close = close.shift(1)
+    tr = pd.concat([
+        high - low,
+        (high - prev_close).abs(),
+        (low - prev_close).abs(),
+    ], axis=1).max(axis=1)
+    return tr.ewm(alpha=1/period, adjust=False, min_periods=period).mean()
+
+
 def calculate_stochastic(df: pd.DataFrame, k_period: int = 14, d_period: int = 3) -> tuple[pd.Series, pd.Series]:
     """스토캐스틱 오실레이터 계산
     Returns: (%K, %D)
@@ -101,6 +113,12 @@ def add_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
     # 가격 변화율
     df["price_change_pct"] = df["close"].pct_change() * 100
 
+    # ATR (변동성) + 고점 대비 낙폭 (섀도우 로그용, score_signal 미반영)
+    df["atr"] = calculate_atr(df)
+    df["atr_pct"] = (df["atr"] / df["close"].replace(0, np.nan) * 100).fillna(0.0)
+    recent_high = df["high"].rolling(20).max()
+    df["pullback_pct"] = ((df["close"] / recent_high - 1) * 100).fillna(0.0)
+
     return df
 
 
@@ -142,4 +160,6 @@ def get_latest_indicators(df: pd.DataFrame, completed: bool = False) -> dict:
         "stoch_k": last.get("stoch_k", 50),
         "stoch_d": last.get("stoch_d", 50),
         "price_change_pct": last.get("price_change_pct", 0),
+        "atr_pct": last.get("atr_pct", 0.0),
+        "pullback_pct": last.get("pullback_pct", 0.0),
     }

@@ -70,12 +70,14 @@ _sell_cooldown: dict[str, datetime] = {}   # ticker → 매도 시각
 _buy_fail: dict[str, dict] = {}            # ticker → {"count": int, "until": datetime|None}
 _buy_confirm: dict[str, int] = {}          # ticker → 연속 score≥임계치 사이클 수 (진입 디바운스용)
 
-# 자동 매매 절대 제외 코인 (보유 중 개인분 + 스테이블코인)
-TRADING_BLACKLIST = {
-    "KRW-XRP", "KRW-CRO", "KRW-RVN",  # 개인 보유분
-    "KRW-USDT", "KRW-USDC", "KRW-DAI", "KRW-BUSD", "KRW-TUSD",
-    "KRW-USDP", "KRW-USDS", "KRW-FDUSD",  # 스테이블코인
-}
+# 개인 실거래 보유분 — 봇이 매수·청산 모두 절대 손대면 안 됨
+PERSONAL_HOLDINGS_BLACKLIST = {"KRW-XRP", "KRW-CRO", "KRW-RVN"}
+
+# 자동 매매 절대 제외 코인 (개인 보유분 + 스테이블코인) — 신규/추가 매수 후보 필터에 사용.
+# 주의: 청산(Phase 1) 로직은 이 통합 세트를 쓰지 않는다 — 스테이블코인 중 봇이 실수로
+# 매수한(bot_bought=True) 포지션은 청산 대상이어야 하므로 PERSONAL_HOLDINGS_BLACKLIST와
+# config.STABLE_COINS를 개별 판정한다 (run_auto_trade Phase 1 참조).
+TRADING_BLACKLIST = PERSONAL_HOLDINGS_BLACKLIST | config.STABLE_COINS
 
 _MAX_LOG = 50
 
@@ -580,7 +582,7 @@ def run_auto_trade():
         market_coins = list(_market_cache.get("coins", []))
     market_map = {c["ticker"]: c for c in market_coins}
     # 보유 코인이 거래량 톱20에서 밀리거나 수집 실패 시 holdings 캐시로 보완
-    # holdings의 action_class(일봉×2+4h×1.5+1h×1 가중)는 market 체계보다 보수적이라
+    # holdings의 action_class(build_analysis_data 기준: 일봉×2.5+4h×2+1h×0.5 가중)는 market 체계(build_market_data: 일봉×2.5+1h×2+1m×0.5)와 타임프레임이 달라 보수적이라
     # 매도 보호(sell-strong) 용도로 안전 — None으로 두면 지표 매도가 조용히 비활성화됨
     with _cache_lock:
         for h in _cache.get("holdings", []):
@@ -623,7 +625,11 @@ def run_auto_trade():
     sold_any = False
 
     for ticker, pos in list(positions_snap.items()):
-        if ticker in TRADING_BLACKLIST:
+        if ticker in PERSONAL_HOLDINGS_BLACKLIST:
+            continue
+        # 스테이블코인은 봇이 실수로 매수한(bot_bought=True) 것만 청산 로직을 태운다.
+        # 사용자가 직접 보유 중인 스테이블코인(bot_bought=False/없음)은 계속 skip.
+        if ticker in config.STABLE_COINS and not pos.get("bot_bought"):
             continue
 
         # 손절/익절 판정은 캐시 대신 실시간 가격 우선 (보유 종목 ≤ 5개라 부담 적음)
@@ -878,6 +884,13 @@ def run_auto_trade():
                 "amount":    amount,
                 "live":      live_mode,
                 "threshold": config.BUY_SCORE_THRESHOLD,
+                "shadow": {
+                    "regime_ok":    regime_ok,
+                    "fg_block":     fg_block,
+                    "atr_pct":      coin.get("atr_pct_1d", 0.0),
+                    "pullback_pct": coin.get("pullback_pct_1d", 0.0),
+                    "bb_pct":       coin.get("bb_pct_1d", coin.get("bb_pct_1m", 0.0)),
+                },
             })
             with _trading_lock:
                 if _trading_state["epoch"] != epoch:
@@ -916,9 +929,11 @@ def run_auto_trade():
 
         per_coin2 = krw2 / remaining_slots if remaining_slots > 0 else 0
         # 사이징 캡: 추가매수도 코인당 (총자산/MAX_POSITIONS) 상한 적용
+        equity_target2 = None
         if config.EQUAL_WEIGHT_SIZING:
             invested2 = sum(p.get("amount_krw", 0) for p in positions_for_add.values())
-            per_coin2 = min(per_coin2, (krw2 + invested2) / MAX_POSITIONS)
+            equity_target2 = (krw2 + invested2) / MAX_POSITIONS
+            per_coin2 = min(per_coin2, equity_target2)
 
         for ticker, pos in list(positions_for_add.items()):
             if remaining_slots <= 0:
@@ -966,7 +981,11 @@ def run_auto_trade():
             if not coin_data or coin_data.get("total_score", 0) < config.BUY_SCORE_THRESHOLD:
                 continue
 
-            amount2 = round(per_coin2 * 0.999)
+            amount2 = per_coin2
+            # 종목당 총 투입액(기존 amount_krw + 이번 추가매수)이 equity_target2를 넘지 않도록 캡
+            if equity_target2 is not None:
+                amount2 = min(amount2, max(0.0, equity_target2 - pos["amount_krw"]))
+            amount2 = round(amount2 * 0.999)
             if amount2 < MIN_ORDER_KRW:
                 continue
             if not _cycle_active(epoch):
@@ -1002,6 +1021,13 @@ def run_auto_trade():
                 "amount":    amount2,
                 "live":      live_mode,
                 "threshold": config.BUY_SCORE_THRESHOLD,
+                "shadow": {
+                    "regime_ok":    regime_ok,
+                    "fg_block":     fg_block,
+                    "atr_pct":      coin_data.get("atr_pct_1d", 0.0),
+                    "pullback_pct": coin_data.get("pullback_pct_1d", 0.0),
+                    "bb_pct":       coin_data.get("bb_pct_1d", coin_data.get("bb_pct_1m", 0.0)),
+                },
             })
             with _trading_lock:
                 if _trading_state["epoch"] != epoch:

@@ -185,11 +185,11 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 파라미터 | 기본값 | 설명 |
 |---------|--------|------|
 | `STOCK_BUY_SCORE_THRESHOLD` | 12 | 진입 점수 임계치 (일봉 × 2.5 가중치) |
-| `STOCK_MAX_LOSS_PERCENT` | 5.0% | 손절 (3년 KOSPI 백테스트 재튜닝: 3.0→5.0) |
+| `STOCK_MAX_LOSS_PERCENT` | 5.0% | 손절 (3년 KOSPI 백테스트 재튜닝: 3.0→5.0, ⚠️ 2026-07-02 페이징 버그 수정 전 ~5개월 데이터 기반 — 재검증 필요) |
 | `STOCK_TAKE_PROFIT_PERCENT` | 5.0% | 익절 |
 | `STOCK_TRAILING_START_PCT` | 9999 | **트레일링 비활성** (백테스트상 이익 조기 절단으로 손해 → 도달 불가능 값으로 OFF) |
 | `STOCK_TRAILING_STOP_PCT` | 1.5% | 고점 대비 하락 한도 (트레일링 OFF로 미사용) |
-| `STOCK_MAX_HOLD_DAYS` | 20 | time-stop (영업일 기준, 재튜닝: 5→20) |
+| `STOCK_MAX_HOLD_DAYS` | 20 | time-stop (영업일 기준, 재튜닝: 5→20, ⚠️ 2026-07-02 페이징 버그 수정 전 ~5개월 데이터 기반 — 재검증 필요) |
 | `STOCK_MAX_PRICE` | 200,000 | 1주 가격 상한 (투자금÷슬롯 기준) |
 | `STOCK_BUY_CLOSE_TIME` | 15:20 | 신규 매수 마감 시각 |
 | `STOCK_ENTRY_CHANGE_MAX` | +2.0% | 당일 등락률 상한 — 갭업 추격 차단 |
@@ -208,7 +208,7 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 2. 시장 레짐 필터 (BTC 단기EMA < 중기EMA) — 시뮬 바이패스
 3. F&G 극단값 (≥80 또는 ≤20) — 시뮬 바이패스
 4. 시장 캐시 노후 (>180초)
-5. 스테이블코인(`_STABLE_COINS`) 또는 `TRADING_BLACKLIST` 종목 — 유니버스 스캔 시 필터링 (USDT·USDC 등 8종)
+5. 스테이블코인(`config.STABLE_COINS`) 또는 개인 보유분(`PERSONAL_HOLDINGS_BLACKLIST`: XRP·CRO·RVN) — 신규/추가 매수 시 필터링 (`TRADING_BLACKLIST` = 두 집합 합집합, 총 11종). **청산(Phase 1)은 별도 규칙**: 개인 보유분은 무조건 제외, 스테이블코인은 `bot_bought=True`면 청산 허용 (2026-07-02)
 6. 진입 점수 < BUY_SCORE_THRESHOLD
 
 **국내주식**
@@ -244,6 +244,9 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 - **`ANTHROPIC_API_KEY` 프롬프트 차단** — `.env`에 `ANTHROPIC_API_KEY`가 환경에 있으면 새 `claude --remote-control` 기동 시 "이 키 사용할까요?" 대화형 프롬프트에서 멈춰 리모트 컨트롤이 뜨지 않는다. 해결: `restart-claude.sh` 기동 명령에 `unset ANTHROPIC_API_KEY` 포함(Remote Control은 Claude Pro 로그인으로 동작, API 키 불필요). 한 번 "No" 응답이 `~/.claude.json` `customApiKeyResponses.rejected`에 영구저장됨.
 - **deploy/*.sh 실행권한 git 추적** — Windows에서 커밋 시 `.sh` 실행 비트가 유실되어 리포에 100644로 저장됨. VPS에서 pull마다 +x가 사라져 watchdog cron(직접 실행)이 `Permission denied`로 silent fail. 해결: `git update-index --chmod=+x deploy/restart-claude.sh deploy/claude-remote-watchdog.sh`로 100755 기록 → pull해도 +x 유지.
 - **claude-remote 세션 운영** — `deploy/claude-remote-watchdog.sh`가 cron(`@reboot` + `*/5 * * * *`)으로 세션 자동복구. `deploy/restart-claude.sh`는 폰 `/restart_claude` Telegram 명령으로 호출. 봇은 `upbit-bot.service` 별도 프로세스라 claude-remote 세션 종료와 무관하게 동작. 단 세션 *내부* 자기재시작은 자기참조로 불가(setsid 분리 필요) — `restart-claude.sh`는 봇이 아닌 외부 Telegram 명령을 통해 호출되므로 문제 없음.
+- **`TRADING_BLACKLIST` 이원적 의미** — 매수 차단(신규·추가매수)에는 `PERSONAL_HOLDINGS_BLACKLIST`(XRP·CRO·RVN) ∪ `config.STABLE_COINS`(8종) 합집합 11종이 전부 적용되지만, 청산(Phase 1)에서는 개인 보유분만 무조건 스킵하고 스테이블코인은 `bot_bought=True`(봇이 실수로 매수한 경우)면 청산을 허용한다. 두 세트를 하나로 취급해 청산 로직까지 스킵하면 봇이 실수로 산 스테이블코인이 영구 동결된다 (2026-07-02 USDT 3,388만원 동결 버그로 발견, `trader.py` Phase 1 분기 참조).
+- **`_sync_live_positions` 라이브 모드 잠재 리스크** — 실거래(`live:true`) 전환 시, 이 함수가 잔고 동기화 과정에서 블랙리스트 제외 종목을 "매도됨"으로 오인해 봇이 보유 중인 스테이블코인 포지션을 추적 상태에서 조용히 지울 수 있다(Phase 1 청산 로직 도달 전에 상태가 사라짐). 현재 `live:false`라 비활성 상태이지만, 라이브 전환 전 반드시 검토·수정 필요 (2026-07-02 핫픽스 검토 중 tester·pm 공동 발견, 미수정 상태로 이월).
+- **KIS 일봉/분봉 API 응답은 내림차순(최신순)** — `inquire-daily-itemchartprice` 등 KIS OHLCV 응답은 날짜가 최신→과거 순으로 내려온다. 페이징 코드가 오름차순을 가정해 `df.index[0]`을 "가장 오래된 날짜"로 쓰면 실제로는 최신 날짜가 되어, 다음 페이지 `end_date`가 하루씩만 뒤로 이동하는 버그가 발생한다(하루치 중복 조회 반복 → 유효 조회 기간이 요청한 `count`와 무관하게 100~110행으로 고정). `df.index.min()`으로 명시적으로 최솟값을 구해야 한다. 향후 KIS 페이징 로직을 추가/수정할 때 반드시 응답 정렬 순서를 먼저 확인할 것 (2026-07-02 `kis_client.py` `_get_daily`/`_get_minute`에서 발견·수정).
 
 ## 최근 변경 이력
 
@@ -310,6 +313,10 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 2026-06-28 | 주식 | **stock-param-optimizer**: 90일 스윕에서 삼성전자·SK하이닉스 등 추세섹터 종목 일부 양수 기대값 확인 |
 | 2026-06-29 | 주식 | **유니버스 교체 + 예산 상향**: `FALLBACK_UNIVERSE` 방어주 19종 → 추세섹터(반도체·2차전지·방산·자동차·바이오·플랫폼·조선·철강·엔터·반도체장비) 18종. `STOCK_SIM_BUDGET` 100만 → 500만원 배포 (`f3973de`) |
 | 2026-06-29 | 인프라 | **app.py 재시작 복원 버그 수정**: `enabled:true` + 포지션 없음 상태로 재시작 시 워커 직접기동 → 주말 스캔·예산 미초기화 문제. 포지션 없으면 `enabled:false` 리셋 후 장 시작 시 notifier가 정상 초기화하도록 수정 배포 (`40072c9`) |
+| 2026-07-02 | 코인 | **USDT 3,388만원 영구 동결 버그 수정**: `TRADING_BLACKLIST`(개인보유+스테이블코인 통합 11종)를 청산(Phase 1) 스킵에도 그대로 적용해 봇이 실수로 매수한 USDT 포지션이 영원히 청산 불가 상태였음. `PERSONAL_HOLDINGS_BLACKLIST`(XRP·CRO·RVN)와 `config.STABLE_COINS`(8종)로 분리해 매수 차단은 기존과 동일(11종 유지)하되, 청산은 개인보유만 무조건 스킵·스테이블코인은 `bot_bought=True`면 허용하도록 수정. 추가매수(Phase 2.5) 사이징도 `slot_count` 누적을 반영해 종목당 자산상한(EQUAL_WEIGHT_SIZING)을 정확히 캡핑하도록 수정. 분석·검증에 각 에이전트(qa·bot-enhancer·strategy-researcher·stock-strategy-researcher) 의견 종합 후 우선순위 재정리 → coder→tester→pm 파이프라인으로 수정 |
+| 2026-07-02 | 코인 | **섀도우 로그 추가**: 매수 시점 게이트 상태(`regime_ok`·`fg_block`·`atr_pct`·`pullback_pct`·`bb_pct`)를 매매 판단에는 반영하지 않고 로그(`shadow` 필드)로만 기록 시작. `core/indicators.py`에 ATR·고점대비낙폭 계산 추가. 목적: 실전 데이터로 향후 신호 재설계 임계값을 실측 검증(과적합 방지). `draft/coin_signal_redesign_spec_2026-07-02.md` 참조 |
+| 2026-07-02 | 코인 | **신호 재설계 실험 2건 백테스트 — 운영 미반영**: strategy-researcher 스펙 기반 BB 부호반전(flip)·BB 제거(off)·ATR 하한게이트를 `scripts/backtest.py` 전용 플래그(`--bb-mode`, `--min-atr`)로 구현해 90일/180일 교차검증. `off` 모드가 두 기간 모두 방향성 개선(-0.284%→-0.075%, -0.404%→-0.208%)이나 채택기준(90+180일 모두 양(+) EV) 미달로 `core/analysis.py` 미반영. ATR 게이트는 1h/1d 지표에 동일 임계 적용되는 설계 결함(confound)으로 무효 처리 — 재설계 필요. 운영 코드 변경 없음(dev-tool 스크립트만 추가) |
+| 2026-07-02 | 주식 | **KIS 일봉/분봉 페이징 버그 수정**: `kis_client.py` `_get_daily`/`_get_minute`에서 `oldest = df.index[0]` → `df.index.min()`. KIS 응답이 내림차순(최신순)인데 오름차순으로 가정해 페이지당 하루치만 중복 이동 → 과거 "3년 KOSPI 백테스트"가 실제로는 ~5개월(100~110행)치 데이터로만 수행됐음이 드러남. 수정 후 `count=1095` 요청 시 2022-01-07~2026-07-02 정상 반환 확인(실거래 API로 직접 검증). `STOCK_MAX_LOSS_PERCENT`·`STOCK_MAX_HOLD_DAYS` 파라미터 표에 재검증 필요 캐비어트 추가 |
 
 ## VPS 인프라
 

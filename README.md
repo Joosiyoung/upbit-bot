@@ -111,11 +111,11 @@ logs/
 | `KIS_ACCOUNT_NO_REAL` | — | 실거래 계좌번호 (예: 50012345-01) |
 | `STOCK_MAX_POSITIONS` | `5` | 주식 최대 동시 보유 종목 수 |
 | `STOCK_BUY_SCORE_THRESHOLD` | `12` | 주식 진입 점수 임계치 |
-| `STOCK_MAX_LOSS_PERCENT` | `5.0` | 주식 손절 (%) — 3년 KOSPI 백테스트 재튜닝(3.0→5.0) |
+| `STOCK_MAX_LOSS_PERCENT` | `5.0` | 주식 손절 (%) — 3년 KOSPI 백테스트 재튜닝(3.0→5.0), ⚠️ 2026-07-02 페이징 버그 수정 전 ~5개월 데이터 기반 — 재검증 필요 |
 | `STOCK_TAKE_PROFIT_PERCENT` | `5.0` | 주식 익절 (%) |
 | `STOCK_TRAILING_START_PCT` | `9999` | **트레일링 비활성** (도달 불가능 값으로 OFF — 백테스트상 이익 조기 절단 손해) |
 | `STOCK_TRAILING_STOP_PCT` | `1.5` | 주식 고점 대비 하락 한도 (%) — 트레일링 OFF로 미사용 |
-| `STOCK_MAX_HOLD_DAYS` | `20` | 주식 최대 보유 일수 (영업일 기준) — 재튜닝(5→20) |
+| `STOCK_MAX_HOLD_DAYS` | `20` | 주식 최대 보유 일수 (영업일 기준) — 재튜닝(5→20), ⚠️ 2026-07-02 페이징 버그 수정 전 ~5개월 데이터 기반 — 재검증 필요 |
 | `STOCK_DAILY_LOSS_LIMIT_PCT` | `5.0` | 주식 일일 손실 한도 초과 시 당일 매수 차단 |
 | `STOCK_FEE_RATE` | `0.003` | 주식 시뮬 수수료율 (매수+매도+세금 합산) |
 | `STOCK_MAX_PRICE` | `200000` | 레거시 고정값. 실제 진입 필터는 `sim_krw / empty_slots`(슬롯당 예산) 기준으로 동적 계산 |
@@ -142,8 +142,10 @@ logs/
 2. 시장 레짐 필터 (BTC 단기EMA < 중기EMA) — 시뮬 모드에서는 바이패스
 3. F&G 극단값 (≥80 또는 ≤20) — 시뮬 모드에서는 바이패스
 4. 시장 캐시 노후 (>180초)
-5. 스테이블코인(`_STABLE_COINS`) 또는 `TRADING_BLACKLIST` 종목 — 유니버스 스캔 시 필터링 (USDT·USDC 등 8종, 2026-06-28)
+5. 스테이블코인(`config.STABLE_COINS`) 또는 개인 보유분(`PERSONAL_HOLDINGS_BLACKLIST`: XRP·CRO·RVN) — 신규/추가 매수 시 필터링 (`TRADING_BLACKLIST` = 두 집합의 합집합, 총 11종)
 6. 진입 점수 < `BUY_SCORE_THRESHOLD` (12)
+
+> **청산은 별도 규칙**: `TRADING_BLACKLIST`는 매수 차단에는 11종 전체가 적용되지만, 청산(Phase 1)에서는 개인 보유분(XRP·CRO·RVN)만 무조건 제외되고 스테이블코인은 `bot_bought=True`(봇이 실수로 매수한 경우)면 청산이 허용된다. 봇이 스테이블코인을 사도 영원히 팔지 못하는 걸 막기 위함 (2026-07-02, USDT 3,388만원 영구 동결 버그 수정).
 
 **주식 매수 차단 게이트 (순서)**
 1. 장 외 시간 — `is_market_hours()` False 시 워커 비활성
@@ -231,4 +233,3 @@ logs/
 | **CSRF 완화** | 상태 변경 엔드포인트는 `Content-Type: application/json` 요청만 수락 (그 외 415 반환). 커스텀 헤더 기반 인증은 브라우저 cross-origin에서 자동 차단됨 |
 | **외부 API sanity check** | F&G 값 0~100 범위 검증, 업비트 마켓 목록 20개 미만 비정상 시 캐시 유지, 체결 trades price/volume 양수 검증 |
 | **상태 파일 스키마 검증** | 재시작 시 `bot_state.json`의 포지션마다 `entry_price > 0`, `quantity > 0`, `1 ≤ slot_count ≤ 10` 검증. 실패 포지션은 폐기 후 WARNING 로그 |
-| **shell=True 제거** | `scripts/restart_helper.py`의 `taskkill`, `netstat` 호출을 리스트 인자 방식으로 전환 (command injection 방지) |

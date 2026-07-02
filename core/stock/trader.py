@@ -390,9 +390,6 @@ def _stock_worker():
                     logging.warning("주식 현재가 조회 실패: %s", code)
                     continue
 
-                if not current_price:
-                    continue
-
                 with _stock_lock:
                     pos = _stock_positions.get(code)
                     if pos is None:
