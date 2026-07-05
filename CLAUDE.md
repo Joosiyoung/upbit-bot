@@ -317,6 +317,7 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 2026-07-02 | 코인 | **섀도우 로그 추가**: 매수 시점 게이트 상태(`regime_ok`·`fg_block`·`atr_pct`·`pullback_pct`·`bb_pct`)를 매매 판단에는 반영하지 않고 로그(`shadow` 필드)로만 기록 시작. `core/indicators.py`에 ATR·고점대비낙폭 계산 추가. 목적: 실전 데이터로 향후 신호 재설계 임계값을 실측 검증(과적합 방지). `draft/coin_signal_redesign_spec_2026-07-02.md` 참조 |
 | 2026-07-02 | 코인 | **신호 재설계 실험 2건 백테스트 — 운영 미반영**: strategy-researcher 스펙 기반 BB 부호반전(flip)·BB 제거(off)·ATR 하한게이트를 `scripts/backtest.py` 전용 플래그(`--bb-mode`, `--min-atr`)로 구현해 90일/180일 교차검증. `off` 모드가 두 기간 모두 방향성 개선(-0.284%→-0.075%, -0.404%→-0.208%)이나 채택기준(90+180일 모두 양(+) EV) 미달로 `core/analysis.py` 미반영. ATR 게이트는 1h/1d 지표에 동일 임계 적용되는 설계 결함(confound)으로 무효 처리 — 재설계 필요. 운영 코드 변경 없음(dev-tool 스크립트만 추가) |
 | 2026-07-02 | 주식 | **KIS 일봉/분봉 페이징 버그 수정**: `kis_client.py` `_get_daily`/`_get_minute`에서 `oldest = df.index[0]` → `df.index.min()`. KIS 응답이 내림차순(최신순)인데 오름차순으로 가정해 페이지당 하루치만 중복 이동 → 과거 "3년 KOSPI 백테스트"가 실제로는 ~5개월(100~110행)치 데이터로만 수행됐음이 드러남. 수정 후 `count=1095` 요청 시 2022-01-07~2026-07-02 정상 반환 확인(실거래 API로 직접 검증). `STOCK_MAX_LOSS_PERCENT`·`STOCK_MAX_HOLD_DAYS` 파라미터 표에 재검증 필요 캐비어트 추가 |
+| 2026-07-02 | 품질 | **코드 정리**: 도달 불가능한 죽은 코드 제거(`stock/trader.py`), Windows 레거시 파일 3종 삭제(`restart.bat`·`scripts/restart_helper.py`·`scripts/start_server.py`, README 보안 표의 관련 항목도 함께 제거), 오해성 주석 정정(`data_builder.py`/`trader.py` — 코인 두 점수함수의 타임프레임 가중치 차이가 "진입 스캔 1h+1m, 보유평가 4h+1h"임을 명확화). 위 4건(USDT 동결·섀도우로그·신호재설계실험·KIS페이징)과 함께 단일 커밋(`d15c06a`)으로 통합 배포 완료 — VPS 재시작 확인(2026-07-02 11:13 UTC), 이후 정상 가동 중 |
 
 ## VPS 인프라
 
