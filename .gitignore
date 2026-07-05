@@ -41,3 +41,6 @@ data/
 *.bak
 
 .agents/
+
+# Claude Code 내부 파일
+skills-lock.json

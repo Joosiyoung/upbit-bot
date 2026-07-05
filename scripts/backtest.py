@@ -366,8 +366,18 @@ def main():
                     help="볼린저밴드 점수 로직 실험(실험 1): current=현행, flip=눌림목 매수형, off=BB 미반영")
     ap.add_argument("--min-atr", type=float, default=0.0,
                     help="변동성 하한 게이트(실험 2): atr_pct 미달 종목 진입 차단. 0=비활성(기본, 회귀 없음)")
+    ap.add_argument("--tp", type=float, default=config.TAKE_PROFIT_PERCENT,
+                    help=f"익절 퍼센트 (기본: config.TAKE_PROFIT_PERCENT={config.TAKE_PROFIT_PERCENT})")
+    ap.add_argument("--sl", type=float, default=config.MAX_LOSS_PERCENT,
+                    help=f"손절 퍼센트 (기본: config.MAX_LOSS_PERCENT={config.MAX_LOSS_PERCENT})")
+    ap.add_argument("--max-hold", type=int, default=config.MAX_HOLD_HOURS,
+                    help=f"최대 보유 시간(h) (기본: config.MAX_HOLD_HOURS={config.MAX_HOLD_HOURS})")
     ap.add_argument("--verbose", action="store_true", help="개별 트레이드 출력")
     args = ap.parse_args()
+
+    config.TAKE_PROFIT_PERCENT = args.tp
+    config.MAX_LOSS_PERCENT = args.sl
+    config.MAX_HOLD_HOURS = args.max_hold
 
     tickers = [t.strip() for t in args.tickers.split(",") if t.strip()]
     print(f"\n백테스트 시작 -- {len(tickers)}종목, {args.days}일, "

@@ -16,6 +16,7 @@ python app.py          # 로컬 실행 → http://127.0.0.1:5000
 # 코인 백테스트
 python scripts/backtest.py --tickers KRW-BTC,KRW-ETH --days 90
 python scripts/backtest.py --days 365   # 전체 종목
+python scripts/backtest.py --tp 6.0 --sl 4.0 --max-hold 48  # 파라미터 오버라이드
 
 # 주식 백테스트 (.env에 KIS_APP_KEY 설정 필요)
 python scripts/stock_backtest.py --tickers 005930,000660 --days 90
@@ -41,7 +42,7 @@ core/
   trading_control.py     # 시작/중지/상태 (Flask ↔ Telegram 공용)
   data_builder.py        # 시장 분석 데이터 빌드·캐시
   analysis.py            # 진입 점수 계산 (score_signal)
-  indicators.py          # RSI, MACD, 볼린저, EMA
+  indicators.py          # RSI, MACD, 볼린저, EMA, ATR, 고점대비낙폭
   telegram_bot.py        # Telegram 명령 봇 (코인봇 13개 명령)
   notifier.py            # Telegram 알림 발송
   upbit_client.py        # pyupbit 래퍼
@@ -54,7 +55,7 @@ core/
     kis_client.py        # KIS API 래퍼 (국내 OHLCV·현재가·거래량순위)
     universe.py          # 국내 매매 대상 종목 풀 (KOSPI 추세섹터 18종목)
 scripts/
-  backtest.py            # 백테스터 (라이브 룰 동일 재현)
+  backtest.py            # 코인 백테스터 (--tp/--sl/--max-hold CLI 오버라이드 지원)
   stock_backtest.py      # 주식 백테스터 (KIS OHLCV → score_signal)
 deploy/
   restart-claude.sh      # VPS claude-remote tmux 세션 재시작 스크립트 (100755)
@@ -72,6 +73,10 @@ logs/
 
 ## 환경변수 (.env)
 
+핵심 변수만 표기. 파라미터 전체 목록은 `CLAUDE.md` 참조.
+
+### 공통·코인
+
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
 | `UPBIT_ACCESS_KEY` / `SECRET_KEY` | — | 업비트 API 키 |
@@ -79,24 +84,18 @@ logs/
 | `TELEGRAM_STOCK_BOT_TOKEN` | `` | Telegram 주식 봇 전용 토큰. 미설정 시 코인 봇으로 fallback |
 | `DASHBOARD_HOST` | `127.0.0.1` | VPS는 Tailscale IP 지정. **0.0.0.0 설정 시 기동 거부** |
 | `DASHBOARD_PORT` | `5000` | 대시보드 포트 |
-| `DASHBOARD_TOKEN` | `` (빈 문자열) | 상태 변경 API(`/api/trading/start`, `/stop`, `/api/refresh`) 인증 토큰. 빈 값이면 경고만 출력하고 통과(로컬 개발 편의). **VPS 운영 시 반드시 설정** |
-| `TRADE_AMOUNT_KRW` | `100000` | 대시보드 표시용 참고값. 실제 매수금액은 실시간 KRW 잔고 ÷ 빈 슬롯 수로 자동 계산 |
+| `DASHBOARD_TOKEN` | `` | 상태 변경 API 인증 토큰. **VPS 운영 시 반드시 설정** (빈 값이면 경고만 출력하고 통과) |
 | `GOOGLE_SHEETS_ID` | `` | Google Sheets 스프레드시트 ID. 미설정 시 Sheets 적재 비활성화 |
 | `GOOGLE_SHEETS_KEY_FILE` | `warm-alliance-*.json` | Service Account JSON 키 파일 경로. **git 미추적 — VPS에 별도 SCP 전송 필요** |
 | `MAX_POSITIONS` | `5` | 최대 동시 보유 종목 수 |
-| `EQUAL_WEIGHT_SIZING` | `True` | True: 종목당 금액을 (총자산 ÷ MAX_POSITIONS)로 상한 — 마지막 슬롯에 잔고 전액 몰림 방지 |
-| `MAX_LOSS_PERCENT` | `4.0` | 손절 (%) — 2026-06-22 알트 재튜닝(3→4) |
-| `TAKE_PROFIT_PERCENT` | `6.0` | 익절 (%) — 2026-06-22 재튜닝(5→6) |
-| `TRAILING_START_PCT` | `9999` | 트레일링 비활성 (승자 조기절단 → OFF). 재활성화 시 정상값 복원 |
-| `TRAILING_STOP_PCT` | `1.5` | 고점 대비 하락 한도 (%) — 트레일링 OFF로 미사용 |
+| `MAX_LOSS_PERCENT` | `4.0` | 손절 (%) |
+| `TAKE_PROFIT_PERCENT` | `6.0` | 익절 (%) |
+| `TRAILING_START_PCT` | `9999` | 트레일링 비활성 (승자 조기절단 방지 목적) |
 | `MAX_HOLD_HOURS` | `48` | time-stop (시간) |
-| `BUY_SCORE_THRESHOLD` | `12` | 진입 점수 임계치 (backtest 검증값) |
+| `BUY_SCORE_THRESHOLD` | `12` | 진입 점수 임계치 |
 | `MARKET_REGIME_FILTER` | `True` | BTC 하락 추세 시 전 종목 매수 차단 |
 | `DAILY_LOSS_LIMIT_PCT` | `5.0` | 일일 손실 한도 초과 시 당일 매수 차단 |
-| `MAX_CONSECUTIVE_STOPLOSS` | `3` | 연속 손절 → 전역 쿨다운 |
-| `GLOBAL_BUY_COOLDOWN_MIN` | `120` | 연속 손절 후 전역 매수 금지 (분) |
-| `FEAR_GREED_GREED_MAX` | `80` | 극단 탐욕 임계값 → 매수 차단 |
-| `FEAR_GREED_FEAR_MIN` | `20` | 극단 공포 임계값 → 매수 차단 |
+| `EQUAL_WEIGHT_SIZING` | `True` | 종목당 금액을 (총자산 ÷ MAX_POSITIONS)로 상한 |
 
 ### KIS API (국내 주식)
 
@@ -108,30 +107,26 @@ logs/
 | `KIS_ACCOUNT_NO_SANDBOX` | — | 모의투자 계좌번호 (예: 50012345-01) |
 | `KIS_APP_KEY_REAL` | — | 실거래 앱 키 |
 | `KIS_APP_SECRET_REAL` | — | 실거래 앱 시크릿 |
-| `KIS_ACCOUNT_NO_REAL` | — | 실거래 계좌번호 (예: 50012345-01) |
+| `KIS_ACCOUNT_NO_REAL` | — | 실거래 계좌번호 |
 | `STOCK_MAX_POSITIONS` | `5` | 주식 최대 동시 보유 종목 수 |
 | `STOCK_BUY_SCORE_THRESHOLD` | `12` | 주식 진입 점수 임계치 |
-| `STOCK_MAX_LOSS_PERCENT` | `5.0` | 주식 손절 (%) — 3년 KOSPI 백테스트 재튜닝(3.0→5.0), ⚠️ 2026-07-02 페이징 버그 수정 전 ~5개월 데이터 기반 — 재검증 필요 |
+| `STOCK_MAX_LOSS_PERCENT` | `5.0` | 주식 손절 (%) ⚠️ KIS 페이징 버그 수정 전 ~5개월 데이터 기반 — 재검증 필요 |
 | `STOCK_TAKE_PROFIT_PERCENT` | `5.0` | 주식 익절 (%) |
-| `STOCK_TRAILING_START_PCT` | `9999` | **트레일링 비활성** (도달 불가능 값으로 OFF — 백테스트상 이익 조기 절단 손해) |
-| `STOCK_TRAILING_STOP_PCT` | `1.5` | 주식 고점 대비 하락 한도 (%) — 트레일링 OFF로 미사용 |
-| `STOCK_MAX_HOLD_DAYS` | `20` | 주식 최대 보유 일수 (영업일 기준) — 재튜닝(5→20), ⚠️ 2026-07-02 페이징 버그 수정 전 ~5개월 데이터 기반 — 재검증 필요 |
+| `STOCK_TRAILING_START_PCT` | `9999` | 트레일링 비활성 |
+| `STOCK_MAX_HOLD_DAYS` | `20` | 주식 최대 보유 일수 (영업일) ⚠️ 재검증 필요 |
+| `STOCK_BUY_CLOSE_TIME` | `15:20` | 신규 매수 마감 시각. 시뮬 모드에서는 비활성화 |
+| `STOCK_ENTRY_CHANGE_MAX` | `2.0` | 당일 등락률 상한 (%) — 갭업 추격 방지 |
+| `STOCK_ENTRY_CHANGE_MIN` | `-3.0` | 당일 등락률 하한 (%) — 폭락 종목 차단 |
+| `STOCK_ADD_BUY_ENABLED` | `True` | 추가매수 활성화 여부 |
+| `STOCK_ADD_BUY_MIN_PROFIT` | `0.0` | 추가매수 허용 최소 수익률 (%). 물타기 방지 |
+| `STOCK_ADD_BUY_MAX_PROFIT` | `2.0` | 추가매수 허용 최대 수익률 (%). 고점 추격 방지 |
+| `STOCK_MAX_SLOTS_PER_TICKER` | `2` | 종목당 최대 슬롯 수 (추가매수 포함 상한) |
+| `STOCK_SIM_BUDGET` | `5000000` | 주식 시뮬 초기 예산(원). `/start_sim` 미입력 시 이 값 사용 |
 | `STOCK_DAILY_LOSS_LIMIT_PCT` | `5.0` | 주식 일일 손실 한도 초과 시 당일 매수 차단 |
 | `STOCK_FEE_RATE` | `0.003` | 주식 시뮬 수수료율 (매수+매도+세금 합산) |
-| `STOCK_MAX_PRICE` | `200000` | 레거시 고정값. 실제 진입 필터는 `sim_krw / empty_slots`(슬롯당 예산) 기준으로 동적 계산 |
-| `STOCK_BUY_CLOSE_TIME` | `15:20` | 신규 매수 마감 시각 (잔여 시간 진입 방지). 시뮬 모드에서는 비활성화 |
-| `STOCK_REGIME_FILTER` | `True` | KOSPI EMA 하락 시 전 종목 매수 차단 |
-| `STOCK_ENTRY_CHANGE_MAX` | `2.0` | 당일 등락률 상한 (%). 이 값 초과 시 진입 차단 (갭업 추격 방지) |
-| `STOCK_ENTRY_CHANGE_MIN` | `-3.0` | 당일 등락률 하한 (%). 이 값 미만 시 진입 차단 (폭락 종목 차단) |
-| `STOCK_ADD_BUY_ENABLED` | `True` | 추가매수 기능 활성화 여부 |
-| `STOCK_ADD_BUY_MIN_PROFIT` | `0.0` | 추가매수 허용 최소 수익률 (%). 손실 중 물타기 방지 |
-| `STOCK_ADD_BUY_MAX_PROFIT` | `2.0` | 추가매수 허용 최대 수익률 (%). 고점 추격매수 방지 |
-| `STOCK_MAX_SLOTS_PER_TICKER` | `2` | 종목당 최대 슬롯 수 (추가매수 포함 상한) |
-| `STOCK_SIM_BUDGET` | `5000000` | 주식 시뮬 초기 예산(원). `/start_sim` 금액 미입력 시 이 값 사용 — 2026-06-29 100만→500만원 상향 |
+| `STOCK_TRAILING_STOP_PCT` | `1.5` | 주식 고점 대비 하락 한도 (%) — 트레일링 OFF(`9999`)로 미사용 |
 
-> **미국주식 모듈 제거됨 (2026-06-17)**: 3년 백테스트 결과 미국 일봉 스윙은 환전 스프레드 포함 왕복 2.5% 수수료로 72조합 전부 손실 → 모듈·`US_*` 파라미터·미국 Telegram 명령 전면 삭제하고 국내 전용으로 롤백. 같은 신호가 국내(왕복 0.6%)에선 흑자.
-
-> **VPS 배포 후**: VPS `.env`는 git 미추적이므로 `KIS_APP_KEY_SANDBOX`, `KIS_APP_SECRET_SANDBOX`, `KIS_ACCOUNT_NO_SANDBOX` (또는 REAL 세트) 6개 변수를 VPS에서 직접 추가해야 KIS 기능이 활성화됩니다.
+> **VPS 배포 후**: VPS `.env`는 git 미추적이므로 KIS 키 6개 변수(`KIS_APP_KEY_SANDBOX` 등)를 VPS에서 직접 추가해야 KIS 기능이 활성화됩니다.
 
 ---
 
@@ -145,7 +140,7 @@ logs/
 5. 스테이블코인(`config.STABLE_COINS`) 또는 개인 보유분(`PERSONAL_HOLDINGS_BLACKLIST`: XRP·CRO·RVN) — 신규/추가 매수 시 필터링 (`TRADING_BLACKLIST` = 두 집합의 합집합, 총 11종)
 6. 진입 점수 < `BUY_SCORE_THRESHOLD` (12)
 
-> **청산은 별도 규칙**: `TRADING_BLACKLIST`는 매수 차단에는 11종 전체가 적용되지만, 청산(Phase 1)에서는 개인 보유분(XRP·CRO·RVN)만 무조건 제외되고 스테이블코인은 `bot_bought=True`(봇이 실수로 매수한 경우)면 청산이 허용된다. 봇이 스테이블코인을 사도 영원히 팔지 못하는 걸 막기 위함 (2026-07-02, USDT 3,388만원 영구 동결 버그 수정).
+> **청산은 별도 규칙**: `TRADING_BLACKLIST`는 매수 차단에는 11종 전체가 적용되지만, 청산(Phase 1)에서는 개인 보유분(XRP·CRO·RVN)만 무조건 제외되고 스테이블코인은 `bot_bought=True`면 청산이 허용된다 (2026-07-02, USDT 3,388만원 영구 동결 버그 수정).
 
 **주식 매수 차단 게이트 (순서)**
 1. 장 외 시간 — `is_market_hours()` False 시 워커 비활성
@@ -158,7 +153,7 @@ logs/
 **청산 우선순위 (Phase 1)**
 상장폐지 → 익절 → 손절 → 트레일링 스탑 → 매도 신호 → time-stop
 
-**점수 공식** (진입 스캔·보유 평가 동일)
+**점수 공식**
 ```
 진입 스캔:  total_score = 일봉×2.5 + 1시간봉×2 + 1분봉×0.5
 보유 평가:  total_score = 일봉×2.5 + 4시간봉×2 + 1시간봉×0.5
@@ -208,7 +203,7 @@ logs/
 | `/params` | 현재 적용 주식 파라미터 조회 |
 | `/market` | 국내 장 현황 (개장/폐장 여부) |
 | `/help` | 명령어 목록 |
-| (자동) 매일 09:00 KST | 국내 장 시작 Telegram 알림 + 주식 시뮬 자동 시작 (`_stock_market_notifier`, 시뮬 여부 무관하게 항상 동작) |
+| (자동) 매일 09:00 KST | 국내 장 시작 Telegram 알림 + 주식 시뮬 자동 시작 (`_stock_market_notifier`) |
 
 ---
 
