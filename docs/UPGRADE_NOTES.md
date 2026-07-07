@@ -41,7 +41,7 @@
 - 테스트가 `trader.judge_exit is exit_rules.judge_exit` 동일성과 legacy 수식 등가를 보증.
 - 스모크 백테스트로 리팩토링 전후 결과 완전 동일 확인(15건, in +2.47% / out +1.61%).
 
-**커밋 상태**: 위 변경은 아직 커밋 안 됨. 검토 후 직접 커밋·`git push`→VPS `git pull` 필요.
+**커밋 상태**: 커밋·`git push` 완료(`52c4b40`, 2026-07-07). VPS `git pull`+재시작 반영 완료.
 
 ---
 
@@ -49,20 +49,15 @@
 
 | # | 항목 | 위험도 | 비고 |
 |---|---|---|---|
-| 0 | **변경분 커밋·VPS 반영** | — | Phase A/B 변경 미커밋. `git push`→VPS `git pull` 필요 |
+| 0 | ~~변경분 커밋·VPS 반영~~ ✅ 완료 | — | `52c4b40` push + VPS 반영 (2026-07-07) |
 | 1 | **파라미터 재검증** (`--days 180 --split`, threshold 스윕) | 무위험 | 코드 안 바꿈. 지금 바로 권장 |
 | 2 | 주식 모듈에 같은 처리 (특성 테스트 + 단일 구현 추출) | 중 | 코인과 동일 패턴 |
 | 3 | 전략 추상화 + PaperBroker A/B 시뮬 | 높음 | 라이브 경로 변경. 1번 검증 후 판단 |
 | 4 | 상태 SQLite 영속화 (Phase C) | 선택 | `d:\Fable`의 SqliteStore 참고 |
 
-### 0. [먼저] 변경분 커밋·VPS 반영
-Phase A/B 변경은 아직 커밋 안 됨. 검토 후 커밋하고 VPS에 반영해야 실제 봇에 적용됨:
-```bash
-git add -A && git commit    # 검토 후
-git push origin main
-# VPS: cd /home/ubuntu/upbit-bot && git pull && sudo systemctl restart upbit-bot
-```
-단, 라이브 매매 동작은 바뀌지 않았으므로(리팩토링만) 급하지 않음. 1번 검증을 먼저 돌려도 됨.
+### 0. [완료] 변경분 커밋·VPS 반영
+Phase A/B 변경은 `52c4b40`로 커밋·`git push`됐고 VPS `git pull`+`systemctl restart upbit-bot`으로
+반영 완료(2026-07-07). 라이브 매매 동작은 바뀌지 않음(리팩토링만).
 
 ### 1. [권장·무위험] 파라미터 재검증
 이제 백테스터를 신뢰할 수 있으니, 실돈/코드 변경 전에 데이터부터 확인:
