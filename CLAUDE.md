@@ -2,6 +2,8 @@
 
 Flask + pyupbit 기반 코인 자동매매 + KIS API 기반 국내주식 시뮬 봇. 대시보드(웹), Telegram 원격 제어, Oracle Cloud VPS 24시간 운영.
 
+> **진행 중 작업**: 백테스트-라이브 정합성 개선. 현황·근거·남은 일은 [docs/UPGRADE_NOTES.md](docs/UPGRADE_NOTES.md) 참조. 청산 판정은 `core/exit_rules.py`, 진입 점수 가중치는 `core/scoring.py` 단일 구현을 라이브·백테스터가 공유한다. 변경 시 `python -m pytest tests`로 특성 테스트 확인.
+
 ## 실행 명령어
 
 ```bash

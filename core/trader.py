@@ -33,7 +33,8 @@ os.makedirs(_DATA_DIR, exist_ok=True)
 STATE_FILE     = os.path.join(_DATA_DIR, "bot_state.json")
 TRADE_LOG_FILE = os.path.join(_DATA_DIR, "trade_history.jsonl")
 
-FEE_RATE = 0.0005   # 업비트 수수료 0.05%
+# 수수료·청산 판정은 core.exit_rules 단일 구현을 공유 (백테스터와 동일 코드)
+from core.exit_rules import FEE_RATE, judge_exit, net_profit_pct
 
 # ─────────────────────────────────────────────
 # 자동 매매 상태 및 상수
@@ -664,11 +665,9 @@ def run_auto_trade():
                              ticker, current_price * pos["quantity"])
             continue
 
-        # 수수료 반영 실수령 기준 수익률 (시뮬·실거래 동일 회계)
-        net_sell_price  = current_price * (1 - FEE_RATE)
-        effective_entry = entry_price * (1 + FEE_RATE)
-        profit_pct      = (net_sell_price - effective_entry) / effective_entry * 100
-        peak_profit_pct = (peak_price * (1 - FEE_RATE) - effective_entry) / effective_entry * 100
+        # 수수료 반영 실수령 기준 수익률 (시뮬·실거래·백테스트 동일 회계)
+        profit_pct      = net_profit_pct(entry_price, current_price)
+        peak_profit_pct = net_profit_pct(entry_price, peak_price)
 
         # 보유 경과 시간 (time-stop용)
         held_hours = None
@@ -686,24 +685,34 @@ def run_auto_trade():
         if active_mkts and ticker not in active_mkts:
             should_sell = True
             sell_reason = f"업비트 거래지원 종료 감지 ({profit_pct:+.1f}%)"
-        elif profit_pct >= take_profit_pct:
-            should_sell = True
-            sell_reason = f"익절 {profit_pct:+.1f}% (목표 +{take_profit_pct}%)"
-        elif profit_pct <= -stop_loss_pct:
-            should_sell = True
-            is_stoploss = True
-            sell_reason = f"손절 {profit_pct:+.1f}% (한도 -{stop_loss_pct}%)"
-        elif (peak_profit_pct >= config.TRAILING_START_PCT
-              and current_price <= peak_price * (1 - config.TRAILING_STOP_PCT / 100)):
-            should_sell = True
-            sell_reason = (f"트레일링 스탑 {profit_pct:+.1f}% "
-                           f"(고점 {peak_profit_pct:+.1f}% 대비 -{config.TRAILING_STOP_PCT}%)")
-        elif coin_data and coin_data.get("action_class") == "sell-strong":
-            should_sell = True
-            sell_reason = f"매도 신호: {coin_data.get('action_text', '매도')} ({profit_pct:+.1f}%)"
-        elif held_hours is not None and held_hours >= config.MAX_HOLD_HOURS:
-            should_sell = True
-            sell_reason = f"보유시간 초과 {held_hours:.0f}h ≥ {config.MAX_HOLD_HOURS:.0f}h ({profit_pct:+.1f}%)"
+        else:
+            # 청산 판정은 백테스터와 동일한 core.exit_rules.judge_exit 사용.
+            # 라이브는 30초 스냅샷 가격 기준이므로 intrabar=False(종가 판정)와 동형.
+            _, exit_key = judge_exit(
+                entry_price, current_price, current_price, current_price,
+                peak_price, held_hours,
+                coin_data.get("action_class") if coin_data else None,
+                take_profit_pct, stop_loss_pct,
+                config.TRAILING_START_PCT, config.TRAILING_STOP_PCT,
+                config.MAX_HOLD_HOURS,
+            )
+            if exit_key == "익절":
+                should_sell = True
+                sell_reason = f"익절 {profit_pct:+.1f}% (목표 +{take_profit_pct}%)"
+            elif exit_key == "손절":
+                should_sell = True
+                is_stoploss = True
+                sell_reason = f"손절 {profit_pct:+.1f}% (한도 -{stop_loss_pct}%)"
+            elif exit_key == "트레일링":
+                should_sell = True
+                sell_reason = (f"트레일링 스탑 {profit_pct:+.1f}% "
+                               f"(고점 {peak_profit_pct:+.1f}% 대비 -{config.TRAILING_STOP_PCT}%)")
+            elif exit_key == "매도신호":
+                should_sell = True
+                sell_reason = f"매도 신호: {coin_data.get('action_text', '매도')} ({profit_pct:+.1f}%)"
+            elif exit_key == "time-stop":
+                should_sell = True
+                sell_reason = f"보유시간 초과 {held_hours:.0f}h ≥ {config.MAX_HOLD_HOURS:.0f}h ({profit_pct:+.1f}%)"
 
         if not should_sell:
             continue

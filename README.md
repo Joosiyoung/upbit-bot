@@ -39,6 +39,8 @@ app.py                   # Flask 진입점 + 백그라운드 워커 기동
 core/
   config.py              # .env 로드, 전역 상수, KST 타임존
   trader.py              # 매매 핵심 로직 (진입·청산·리스크·상태 저장)
+  exit_rules.py          # 청산 판정 단일 구현 (trader·백테스터 공유, 양방향 수수료 회계)
+  scoring.py             # 진입 점수 가중 합산 단일 구현 (data_builder·백테스터 공유)
   trading_control.py     # 시작/중지/상태 (Flask ↔ Telegram 공용)
   data_builder.py        # 시장 분석 데이터 빌드·캐시
   analysis.py            # 진입 점수 계산 (score_signal)
@@ -55,8 +57,9 @@ core/
     kis_client.py        # KIS API 래퍼 (국내 OHLCV·현재가·거래량순위)
     universe.py          # 국내 매매 대상 종목 풀 (KOSPI 추세섹터 18종목)
 scripts/
-  backtest.py            # 코인 백테스터 (--tp/--sl/--max-hold CLI 오버라이드 지원)
+  backtest.py            # 코인 백테스터 (--tp/--sl/--max-hold/--split/--sweep-threshold)
   stock_backtest.py      # 주식 백테스터 (KIS OHLCV → score_signal)
+tests/                   # 특성 테스트 41개 (score_signal·indicators·judge_exit·weighted_score) — pip install -r requirements-dev.txt
 deploy/
   restart-claude.sh      # VPS claude-remote tmux 세션 재시작 스크립트 (100755)
   claude-remote-watchdog.sh  # 세션 미기동 시 자동 복구 (cron @reboot + */5)

@@ -17,6 +17,8 @@ from core.analysis import (
     rsi_label, rsi_class, macd_label, macd_class,
     bb_label, bb_class, trend_label, trend_class,
 )
+# 진입 점수 가중치는 백테스터와 공유하는 단일 구현 — Phase B
+from core.scoring import weighted_score
 
 # ─────────────────────────────────────────────
 # 캐시
@@ -148,11 +150,12 @@ def build_analysis_data():
             }
             time.sleep(0.1)  # API rate limit 방어
 
-        # 가중 합산 점수 (진입 스캔과 가중치 "비율"은 동일: 일봉 2.5·중기 2·단기 0.5. 단 진입 스캔(build_market_data)은 4시간봉·1시간봉 대신 1시간봉·1분봉을 사용 — 타임프레임 자체는 다름)
-        total_score = (
-            scores.get('day', 0) * 2.5 +
-            scores.get('minute240', 0) * 2 +
-            scores.get('minute60', 0) * 0.5
+        # 가중 합산 점수 (보유 평가: 일봉=장기, 4시간봉=중기, 1시간봉=단기 슬롯).
+        # 가중치 비율은 진입 스캔과 동일하나 중기/단기에 넣는 타임프레임이 다르다.
+        total_score = weighted_score(
+            scores.get('day', 0),
+            scores.get('minute240', 0),
+            scores.get('minute60', 0),
         )
         action_text, action_class = action_from_score(total_score)
 
@@ -290,11 +293,12 @@ def build_market_data():
             else:
                 ind_1d = _neutral_indicators()
 
-            # 종합 점수 (1m은 타이밍용으로 최신봉 사용, 1h·1d는 완성봉 기준)
+            # 종합 점수 (1m은 타이밍용으로 최신봉 사용, 1h·1d는 완성봉 기준).
+            # 진입 스캔: 일봉=장기, 1시간봉=중기, 1분봉=단기 슬롯.
             sc_1m = score_signal(ind_1m)
             sc_1h = score_signal(ind_1h)
             sc_1d = score_signal(ind_1d)
-            total = sc_1d * 2.5 + sc_1h * 2 + sc_1m * 0.5
+            total = weighted_score(sc_1d, sc_1h, sc_1m)
 
             action_text, action_class = action_from_score(total)
 

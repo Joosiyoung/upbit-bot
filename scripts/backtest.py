@@ -35,8 +35,10 @@ import pyupbit
 from core.indicators import add_all_indicators
 from core.analysis import score_signal, action_from_score
 from core import config
-
-FEE_RATE = 0.0005   # 업비트 수수료 0.05% (편도)
+# 수수료·청산 판정은 라이브(trader.py)와 동일한 단일 구현을 공유 — Phase B 핵심.
+# 과거에는 여기 별도 구현이 있어 판정 회계가 편도 수수료 기준으로 ~0.1% 어긋났다.
+from core.exit_rules import FEE_RATE, judge_exit  # noqa: F401 (judge_exit는 루프에서 사용)
+from core.scoring import weighted_score  # 진입 점수 가중치도 라이브와 공유
 
 DEFAULT_TICKERS = ["KRW-BTC", "KRW-ETH", "KRW-SOL", "KRW-XRP", "KRW-DOGE",
                    "KRW-ADA", "KRW-LINK", "KRW-AVAX", "KRW-DOT", "KRW-TRX"]
@@ -46,8 +48,17 @@ DEFAULT_TICKERS = ["KRW-BTC", "KRW-ETH", "KRW-SOL", "KRW-XRP", "KRW-DOGE",
 # 데이터 수집 (페이지네이션)
 # ─────────────────────────────────────────────
 
+_OHLCV_CACHE: dict = {}
+
+
 def fetch_ohlcv(ticker: str, interval: str, count: int) -> pd.DataFrame:
-    """count개 캔들을 페이지네이션으로 수집 (pyupbit는 호출당 최대 200개)."""
+    """count개 캔들을 페이지네이션으로 수집 (pyupbit는 호출당 최대 200개).
+
+    같은 실행 내 재호출(--sweep-threshold)을 위해 메모리 캐시한다.
+    """
+    key = (ticker, interval, count)
+    if key in _OHLCV_CACHE:
+        return _OHLCV_CACHE[key]
     frames = []
     to = None
     remaining = count
@@ -63,9 +74,11 @@ def fetch_ohlcv(ticker: str, interval: str, count: int) -> pd.DataFrame:
             break
         time.sleep(0.12)
     if not frames:
-        return pd.DataFrame()
+        _OHLCV_CACHE[key] = pd.DataFrame()
+        return _OHLCV_CACHE[key]
     out = pd.concat(frames).sort_index()
     out = out[~out.index.duplicated(keep="first")]
+    _OHLCV_CACHE[key] = out
     return out
 
 
@@ -238,7 +251,7 @@ def backtest_ticker(ticker: str, days: int, threshold: float, confirm: int,
         close = float(hourly["close"].iloc[i])
         sc_1h = score_signal_experimental(row_to_ind(hourly, i), bb_mode=bb_mode, min_atr_pct=min_atr_pct)
         sc_1d = daily_score_before(ts.date())
-        total = sc_1d * 2.5 + sc_1h * 2.0   # 1m 항목 생략(가중치 0.5)
+        total = weighted_score(sc_1d, sc_1h)   # 단기(1분봉) 슬롯은 0 — 과거 대량 수집 곤란
         _, action_class = action_from_score(total)
 
         if not in_pos:
@@ -262,36 +275,12 @@ def backtest_ticker(ticker: str, days: int, threshold: float, confirm: int,
         low  = float(hourly["low"].iloc[i]) if intrabar else close
         peak = max(peak, high)
 
-        net_close = close * (1 - FEE_RATE)
-        profit_pct = (net_close - entry_price) / entry_price * 100
-        peak_profit_pct = (peak * (1 - FEE_RATE) - entry_price) / entry_price * 100
         held_h = (i - entry_idx)  # 1시간봉이므로 봉 수 = 시간
-
-        exit_price = close
-        reason = None
-
-        # 익절 (intrabar: 고가가 목표 도달)
-        tp_price = entry_price * (1 + tp / 100) / (1 - FEE_RATE)
-        sl_price = entry_price * (1 - sl / 100) / (1 - FEE_RATE)
-        if intrabar and high >= tp_price and low <= sl_price:
-            # 한 봉에서 둘 다 터치 → 보수적으로 손절 우선
-            exit_price = sl_price
-            reason = "손절(intrabar 동시터치)"
-        elif (intrabar and high >= tp_price) or (not intrabar and profit_pct >= tp):
-            exit_price = tp_price if intrabar else close
-            reason = "익절"
-        elif (intrabar and low <= sl_price) or (not intrabar and profit_pct <= -sl):
-            exit_price = sl_price if intrabar else close
-            reason = "손절"
-        elif peak_profit_pct >= tr_start and close <= peak * (1 - tr_stop / 100):
-            exit_price = close
-            reason = "트레일링"
-        elif (not no_signal_exit) and action_class == "sell-strong":
-            exit_price = close
-            reason = "매도신호"
-        elif held_h >= max_hold_h:
-            exit_price = close
-            reason = "time-stop"
+        exit_price, reason = judge_exit(
+            entry_price, close, high, low, peak, held_h, action_class,
+            tp, sl, tr_start, tr_stop, max_hold_h,
+            intrabar=intrabar, no_signal_exit=no_signal_exit,
+        )
 
         if reason:
             ret = (exit_price * (1 - FEE_RATE)) / (entry_price * (1 + FEE_RATE)) - 1
@@ -347,6 +336,98 @@ def summarize(all_trades: list) -> dict:
     }
 
 
+def format_reason_breakdown(trades: list) -> str:
+    """청산 사유별 손익 분해 — 손실이 어느 청산 경로에서 새는지 진단.
+
+    (실측 사례: 2026-06~07 시뮬 271건에서 손절 49%가 누적 -524%로 손실 주범임을
+    이 분해로 확인 — 브래킷 문제가 아니라 진입 품질 문제라는 결론의 근거)
+    """
+    groups: dict[str, list] = {}
+    for t in trades:
+        groups.setdefault(t["reason"], []).append(t["ret_pct"])
+    lines = [f"  {'청산 사유':<20} {'건수':>4} {'승률':>7} {'평균':>8} {'누적':>9}"]
+    for reason, rets in sorted(groups.items(), key=lambda kv: sum(kv[1])):
+        wins = len([r for r in rets if r > 0])
+        lines.append(
+            f"  {reason:<20} {len(rets):>4} {wins / len(rets) * 100:>6.1f}%"
+            f" {sum(rets) / len(rets):>+7.2f}% {sum(rets):>+8.1f}%"
+        )
+    return "\n".join(lines)
+
+
+def split_trades(trades: list, split_date: str) -> tuple[list, list]:
+    """청산 시각 기준 in-sample(< split) / out-of-sample(>= split) 분리.
+
+    exit_ts는 ISO 문자열이라 사전순 비교가 시간순 비교와 일치한다.
+    """
+    ins = [t for t in trades if t["exit_ts"] < split_date]
+    outs = [t for t in trades if t["exit_ts"] >= split_date]
+    return ins, outs
+
+
+def run_all(tickers: list, args, threshold: float, quiet: bool = False):
+    """전 종목 백테스트 실행. quiet=True면 종목별 출력 생략(스윕용)."""
+    all_trades = []
+    bh_rets = []
+    for tk in tickers:
+        res = backtest_ticker(tk, args.days, threshold, args.confirm,
+                              args.intrabar, args.verbose, args.no_signal_exit,
+                              args.regime_gate, args.bb_mode, args.min_atr)
+        if res.get("skipped"):
+            if not quiet:
+                print(f"  {tk:12s} 스킵 ({res['skipped']})")
+            continue
+        if res.get("bh_ret") is not None:
+            bh_rets.append(res["bh_ret"])
+        s = summarize(res["trades"])
+        all_trades.extend(res["trades"])
+        if quiet:
+            continue
+        if s["n"]:
+            print(f"  {tk:12s} 거래 {s['n']:3d}건  승률 {s['win_rate']:5.1f}%  "
+                  f"평균 {s['avg_ret']:+5.2f}%  복리 {s['total_compound']:+7.1f}%  "
+                  f"MDD {s['mdd']:6.1f}%")
+        else:
+            print(f"  {tk:12s} 거래 0건")
+        if args.verbose:
+            for t in res["trades"]:
+                print(f"      {t['entry_ts']} → {t['exit_ts']}  "
+                      f"{t['ret_pct']:+5.2f}%  {t['reason']}")
+    return all_trades, bh_rets
+
+
+def _sweep_cell(trades: list) -> str:
+    s = summarize(trades)
+    if not s["n"]:
+        return f"{'거래없음':^36}"
+    return (f"{s['n']:>4}건 {s['win_rate']:>5.1f}% {s['avg_ret']:>+6.2f}%"
+            f" {s['total_compound']:>+7.1f}% {s['mdd']:>6.1f}%")
+
+
+def run_sweep(tickers: list, args) -> None:
+    """threshold 스윕. --split과 함께 쓰면 in/out-of-sample 과최적화 검증.
+
+    OHLCV는 _OHLCV_CACHE로 재사용되므로 첫 threshold만 API를 호출한다.
+    """
+    thresholds = [float(x) for x in args.sweep_threshold.split(",") if x.strip()]
+    windows = ["in-sample", "out-of-sample"] if args.split else ["전체 구간"]
+    print(f"\n=== threshold 스윕 (분할: {args.split or '없음'}) ===")
+    print(f"{'th':>5} | " + " | ".join(f"{w:^36}" for w in windows))
+    print(f"{'':>5} | " + " | ".join(
+        f"{'건수':>5} {'승률':>5} {'평균':>6} {'복리':>8} {'MDD':>6}" for _ in windows))
+    print("-" * (8 + 39 * len(windows)))
+    for th in thresholds:
+        trades, _ = run_all(tickers, args, th, quiet=True)
+        if args.split:
+            ins, outs = split_trades(trades, args.split)
+            cells = [_sweep_cell(ins), _sweep_cell(outs)]
+        else:
+            cells = [_sweep_cell(trades)]
+        print(f"{th:>5.1f} | " + " | ".join(cells))
+    print("\n판정 기준: in-sample 최적 threshold가 out-of-sample에서도 상위권이어야"
+          " 과최적화가 아니다.")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Upbit 자동매매 봇 백테스터")
     ap.add_argument("--tickers", default=",".join(DEFAULT_TICKERS),
@@ -373,6 +454,10 @@ def main():
     ap.add_argument("--max-hold", type=int, default=config.MAX_HOLD_HOURS,
                     help=f"최대 보유 시간(h) (기본: config.MAX_HOLD_HOURS={config.MAX_HOLD_HOURS})")
     ap.add_argument("--verbose", action="store_true", help="개별 트레이드 출력")
+    ap.add_argument("--split", default=None, metavar="YYYY-MM-DD",
+                    help="in/out-of-sample 분할 기준일 — 청산 시각 기준으로 성과를 분리 보고")
+    ap.add_argument("--sweep-threshold", default=None, metavar="8,10,12,14",
+                    help="쉼표구분 threshold 목록을 스윕. --split과 함께 과최적화 검증")
     args = ap.parse_args()
 
     config.TAKE_PROFIT_PERCENT = args.tp
@@ -388,31 +473,11 @@ def main():
           f"time-stop {config.MAX_HOLD_HOURS:.0f}h / 수수료 왕복 {FEE_RATE*2*100:.2f}%")
     print("=" * 64)
 
-    all_trades = []
-    per_ticker = []
-    bh_rets = []
-    for tk in tickers:
-        res = backtest_ticker(tk, args.days, args.threshold, args.confirm,
-                              args.intrabar, args.verbose, args.no_signal_exit,
-                              args.regime_gate, args.bb_mode, args.min_atr)
-        if res.get("skipped"):
-            print(f"  {tk:12s} 스킵 ({res['skipped']})")
-            continue
-        if res.get("bh_ret") is not None:
-            bh_rets.append(res["bh_ret"])
-        s = summarize(res["trades"])
-        per_ticker.append((tk, s))
-        all_trades.extend(res["trades"])
-        if s["n"]:
-            print(f"  {tk:12s} 거래 {s['n']:3d}건  승률 {s['win_rate']:5.1f}%  "
-                  f"평균 {s['avg_ret']:+5.2f}%  복리 {s['total_compound']:+7.1f}%  "
-                  f"MDD {s['mdd']:6.1f}%")
-        else:
-            print(f"  {tk:12s} 거래 0건")
-        if args.verbose:
-            for t in res["trades"]:
-                print(f"      {t['entry_ts']} → {t['exit_ts']}  "
-                      f"{t['ret_pct']:+5.2f}%  {t['reason']}")
+    if args.sweep_threshold:
+        run_sweep(tickers, args)
+        return
+
+    all_trades, bh_rets = run_all(tickers, args, args.threshold)
 
     print("=" * 64)
     agg = summarize(all_trades)
@@ -425,6 +490,18 @@ def main():
           f"평균 보유 {agg['avg_hold_h']:.1f}h")
     print(f"순차 복리 수익률 {agg['total_compound']:+.1f}%  |  최대낙폭(MDD) {agg['mdd']:.1f}%")
     print(f"청산 사유 분포: {agg['reasons']}")
+    print("\n--- 청산 사유별 손익 분해 ---")
+    print(format_reason_breakdown(all_trades))
+    if args.split:
+        ins, outs = split_trades(all_trades, args.split)
+        for name, part in [("in-sample", ins), ("out-of-sample", outs)]:
+            ps = summarize(part)
+            if not ps["n"]:
+                print(f"\n[{name}] ({args.split} 기준) 거래 없음")
+                continue
+            print(f"\n[{name}] {ps['n']}건  승률 {ps['win_rate']:.1f}%  "
+                  f"기대값 {ps['avg_ret']:+.3f}%  복리 {ps['total_compound']:+.1f}%  "
+                  f"MDD {ps['mdd']:.1f}%")
     if bh_rets:
         bh_avg = sum(bh_rets) / len(bh_rets)
         print(f"[벤치마크] Buy&Hold 평균 종목 수익률 {bh_avg:+.1f}% "
