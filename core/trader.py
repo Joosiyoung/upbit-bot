@@ -755,6 +755,8 @@ def run_auto_trade():
             "trailing_stop_pct":  config.TRAILING_STOP_PCT,
             "max_hold_hours":     config.MAX_HOLD_HOURS,
         })
+        logging.info("[%s] 청산 체결: 가격 %.0f원, 수익률 %+.2f%%, 사유=%s, live=%s",
+                     ticker, current_price, profit_pct, sell_reason, live_mode)
         with _trading_lock:
             _trading_state["positions"].pop(ticker, None)
             if not live_mode:
@@ -901,6 +903,8 @@ def run_auto_trade():
                     "bb_pct":       coin.get("bb_pct_1d", coin.get("bb_pct_1m", 0.0)),
                 },
             })
+            logging.info("[%s] 매수 체결: 가격 %.0f원, 금액 %.0f원, %s, live=%s",
+                         ticker, stored_entry, amount, buy_reason, live_mode)
             with _trading_lock:
                 if _trading_state["epoch"] != epoch:
                     return
@@ -1038,6 +1042,8 @@ def run_auto_trade():
                     "bb_pct":       coin_data.get("bb_pct_1d", coin_data.get("bb_pct_1m", 0.0)),
                 },
             })
+            logging.info("[%s] 추가매수 체결: 가격 %.0f원, 금액 %.0f원, %s, live=%s",
+                         ticker, fill_price2, amount2, add_reason, live_mode)
             with _trading_lock:
                 if _trading_state["epoch"] != epoch:
                     return
