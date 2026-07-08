@@ -59,6 +59,7 @@ core/
 scripts/
   backtest.py            # 코인 백테스터 (--tp/--sl/--max-hold/--split/--sweep-threshold)
   stock_backtest.py      # 주식 백테스터 (KIS OHLCV → score_signal)
+  shadow_analysis.py     # 섀도우 로그↔거래성과 FIFO 매칭 진단 (UPGRADE_NOTES §1.5 재판정 도구)
 tests/                   # 특성 테스트 41개 (score_signal·indicators·judge_exit·weighted_score) — pip install -r requirements-dev.txt
 deploy/
   restart-claude.sh      # VPS claude-remote tmux 세션 재시작 스크립트 (100755)
