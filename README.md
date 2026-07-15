@@ -96,7 +96,7 @@ logs/
 | `TAKE_PROFIT_PERCENT` | `6.0` | 익절 (%) |
 | `TRAILING_START_PCT` | `9999` | 트레일링 비활성 (승자 조기절단 방지 목적) |
 | `MAX_HOLD_HOURS` | `48` | time-stop (시간) |
-| `BUY_SCORE_THRESHOLD` | `12` | 진입 점수 임계치 |
+| `BUY_SCORE_THRESHOLD` | `13` | 진입 점수 임계치 (2026-07-14 채택: bb-off+레짐게이트 in +0.12% / out +0.18%) |
 | `MARKET_REGIME_FILTER` | `True` | BTC 하락 추세 시 전 종목 매수 차단 |
 | `DAILY_LOSS_LIMIT_PCT` | `5.0` | 일일 손실 한도 초과 시 당일 매수 차단 |
 | `EQUAL_WEIGHT_SIZING` | `True` | 종목당 금액을 (총자산 ÷ MAX_POSITIONS)로 상한 |
@@ -138,11 +138,11 @@ logs/
 
 **매수 차단 게이트 (순서)**
 1. 일일 손실 한도 / 연속 손절 쿨다운
-2. 시장 레짐 필터 (BTC 단기EMA < 중기EMA) — 시뮬 모드에서는 바이패스
+2. 시장 레짐 필터 (BTC 단기EMA < 중기EMA) — 시뮬에도 동일 적용 (2026-07-14~)
 3. F&G 극단값 (≥80 또는 ≤20) — 시뮬 모드에서는 바이패스
 4. 시장 캐시 노후 (>180초)
 5. 스테이블코인(`config.STABLE_COINS`) 또는 개인 보유분(`PERSONAL_HOLDINGS_BLACKLIST`: XRP·CRO·RVN) — 신규/추가 매수 시 필터링 (`TRADING_BLACKLIST` = 두 집합의 합집합, 총 11종)
-6. 진입 점수 < `BUY_SCORE_THRESHOLD` (12)
+6. 진입 점수 < `BUY_SCORE_THRESHOLD` (13)
 
 > **청산은 별도 규칙**: `TRADING_BLACKLIST`는 매수 차단에는 11종 전체가 적용되지만, 청산(Phase 1)에서는 개인 보유분(XRP·CRO·RVN)만 무조건 제외되고 스테이블코인은 `bot_bought=True`면 청산이 허용된다 (2026-07-02, USDT 3,388만원 영구 동결 버그 수정).
 

@@ -122,7 +122,7 @@ def build_analysis_data():
             # 일봉·4h·1h는 진행 중인 봉이 포함되므로 완성봉(iloc[-2]) 기준으로 신호 산출
             ind = get_latest_indicators(df, completed=True)
             sup, res = support_resistance(df)
-            sc = score_signal(ind)
+            sc = score_signal(ind, bb_mode="off")
             scores[interval] = sc
 
             timeframes[interval] = {
@@ -295,9 +295,10 @@ def build_market_data():
 
             # 종합 점수 (1m은 타이밍용으로 최신봉 사용, 1h·1d는 완성봉 기준).
             # 진입 스캔: 일봉=장기, 1시간봉=중기, 1분봉=단기 슬롯.
-            sc_1m = score_signal(ind_1m)
-            sc_1h = score_signal(ind_1h)
-            sc_1d = score_signal(ind_1d)
+            # bb_mode="off": 상승추세 BB 추격 가점 제거 (2026-07-14 채택안).
+            sc_1m = score_signal(ind_1m, bb_mode="off")
+            sc_1h = score_signal(ind_1h, bb_mode="off")
+            sc_1d = score_signal(ind_1d, bb_mode="off")
             total = weighted_score(sc_1d, sc_1h, sc_1m)
 
             action_text, action_class = action_from_score(total)

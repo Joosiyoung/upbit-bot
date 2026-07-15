@@ -53,7 +53,7 @@ def bb_class(bb_pct):
     elif bb_pct >= 0.8: return "sell-zone"
     else:               return "neutral"
 
-def score_signal(ind):
+def score_signal(ind, bb_mode: str = "current"):
     """추세 정렬 + 모멘텀 확인형 진입 점수.
 
     [재설계 배경] 구버전은 RSI 과매도·BB 하단 이탈에 큰 가점을 주는 순수
@@ -67,6 +67,11 @@ def score_signal(ind):
       3) RSI·BB·스토캐스틱은 '추세 안에서의 위치'로 재해석 —
          상승추세의 얕은 눌림목은 매수 기회, 비추세 과매도에는 가점하지 않아
          '떨어지는 칼 잡기'를 차단한다.
+
+    bb_mode="off": 상승추세 BB 블록 생략 (코인 경로 전용).
+                   2026-07-14 채택: bb-off+레짐게이트 스윕 in+0.12/out+0.18.
+                   비추세 BB 블록은 유지 (채택 안에서 검증된 범위).
+    bb_mode="current": 기본값 — 주식 및 기존 동작 완전 보존.
     """
     es, em, el = ind['ema_short'], ind['ema_mid'], ind['ema_long']
     rsi = ind['rsi']
@@ -103,13 +108,21 @@ def score_signal(ind):
         elif rsi > 60: score -= 1
 
     # ── 볼린저: 추세 내 위치로 해석 ──
-    # 상승추세의 중상단 주행은 강세 지속, 하단 이탈은 추세 깨짐 경고.
-    if bullish:
-        if bb_pct >= 0.8:   score += 1    # 상단 주행 = 강세 지속
-        elif bb_pct <= 0.0: score -= 1    # 추세 이탈 경고
+    # bb_mode="off": 상승추세 BB 블록 생략 (추격 가점 제거 — 코인 경로 전용).
+    # bb_mode="current": 현행 동작 유지 (주식 경로 기본값).
+    if bb_mode == "off":
+        # 비추세 BB 블록만 적용 (상승추세 BB 완전 생략)
+        if not bullish:
+            if bb_pct >= 1.0:   score -= 2    # 비추세 상단 이탈 → 매도
+            elif bb_pct >= 0.8: score -= 1
     else:
-        if bb_pct >= 1.0:   score -= 2    # 비추세 상단 이탈 → 매도
-        elif bb_pct >= 0.8: score -= 1
+        # 현행 동작 (current)
+        if bullish:
+            if bb_pct >= 0.8:   score += 1    # 상단 주행 = 강세 지속
+            elif bb_pct <= 0.0: score -= 1    # 추세 이탈 경고
+        else:
+            if bb_pct >= 1.0:   score -= 2    # 비추세 상단 이탈 → 매도
+            elif bb_pct >= 0.8: score -= 1
 
     # ── 스토캐스틱 (보조) ──
     if bullish and sk < 40:  score += 1   # 추세 내 단기 눌림

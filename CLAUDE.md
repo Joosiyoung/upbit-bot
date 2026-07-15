@@ -173,8 +173,8 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 
 | 파라미터 | 기본값 | 설명 |
 |---------|--------|------|
-| `BUY_SCORE_THRESHOLD` | 12 | 진입 점수 임계치 (365일 백테스트: +0.15% 기대값) |
-| `MARKET_REGIME_FILTER` | True | BTC EMA 하락 시 전 종목 매수 차단 |
+| `BUY_SCORE_THRESHOLD` | 13 | 진입 점수 임계치 (2026-07-14 채택: bb-off+레짐게이트 180d in +0.12% / out +0.18%, 임계값 13·14 연속 통과) |
+| `MARKET_REGIME_FILTER` | True | BTC EMA 하락 시 전 종목 매수 차단 (2026-07-14부터 시뮬에도 동일 적용) |
 | `MAX_LOSS_PERCENT` | 4.0% | 손절 (2026-06-22 알트 유니버스 재튜닝: 3.0→4.0) |
 | `TAKE_PROFIT_PERCENT` | 6.0% | 익절 (2026-06-22 재튜닝: 5.0→6.0, 알트 변동성에 넓은 타깃) |
 | `TRAILING_START_PCT` | 9999 | **트레일링 비활성** (트레일링이 +5% 익절 도달을 100% 차단·승자 조기절단 → 9999로 OFF) |
@@ -206,7 +206,7 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 
 **코인** (순서)
 1. 일일 손실 한도 / 연속 손절 쿨다운
-2. 시장 레짐 필터 (BTC 단기EMA < 중기EMA) — 시뮬 바이패스
+2. 시장 레짐 필터 (BTC 단기EMA < 중기EMA) — 시뮬에도 동일 적용 (2026-07-14~)
 3. F&G 극단값 (≥80 또는 ≤20) — 시뮬 바이패스
 4. 시장 캐시 노후 (>180초)
 5. 스테이블코인(`config.STABLE_COINS`) 또는 개인 보유분(`PERSONAL_HOLDINGS_BLACKLIST`: XRP·CRO·RVN) — 신규/추가 매수 시 필터링 (`TRADING_BLACKLIST` = 두 집합 합집합, 총 11종). **청산(Phase 1)은 별도 규칙**: 개인 보유분은 무조건 제외, 스테이블코인은 `bot_bought=True`면 청산 허용 (2026-07-02)
@@ -229,7 +229,7 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 - **Telegram 409 충돌** — 같은 토큰으로 로컬+VPS 동시 기동 금지.
 - **상태 파일 datetime** — naive datetime → `_as_kst()`로 KST-aware 변환 후 비교.
 - **주식 시뮬 시작** — 장 외 시간 호출 시 즉시 거부. 재시작 시 기존 포지션·잔고 유지(`_stock_positions.clear()` 없음).
-- **시뮬 모드 목적** — 레짐 필터·F&G 바이패스는 데이터 축적 목적. 진입 점수 임계치(12)는 유지.
+- **시뮬 모드 목적** — F&G 바이패스만 유지(데이터 축적 목적). 레짐 필터는 2026-07-14부터 시뮬에도 동일 적용(백테스트 검증 구성과 일치). 진입 점수 임계치(13)는 라이브와 동일.
 - **VPS git push** — SSH 키 인증(`~/.ssh/id_ed25519`)으로 해결됨. `git push origin main` VPS에서 직접 가능.
 - **`_stock_sold_today` 비지속** — 서비스 재시작 시 초기화됨. 당일 매도 이력은 메모리에만 보관. 의도적 설계(재시작 후 당일 재진입은 허용).
 - **`_daily_signal_cache` 단일 워커 전용** — `_stock_worker` 외 다른 스레드에서 접근 금지. 락 없이 설계됨.
@@ -272,6 +272,7 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 2026-07-05 | 코인 | **backtest.py `--tp`/`--sl`/`--max-hold` CLI 인자 추가**: 파라미터 스윕 자동화를 위해 스크립트 레벨 config 오버라이드 가능하도록 수정 |
 | 2026-07-05 | 인프라 | **폴더 정리**: `project_report.html`, `draft/plan_stock_module_*.md`, `draft/us_stock_implementation_plan.md`, `draft/_sheets_export/` 삭제. `.gitignore`에 `skills-lock.json` 추가 |
 | 2026-07-05 | 방향 | **신호 재설계 방향 채택**: log-analyzer(corr=0.049)·bot-enhancer(corr=0.051)·param-optimizer 스윕(전조합 음수) 3개 독립 분석 일치 → 섀도우 로그 30건 이상 축적 후 진입 신호 재설계 단계 진입 예정 |
+| 2026-07-14 | 코인 | **신호 재설계 채택 — BB 추격 가점 제거 + 임계치 13 + 시뮬 레짐 정합화**: 섀도우 78건 매칭(bb_pct 하위 +0.58% vs 상위 -0.81%)·주식 백테스트 교차 확인 후 `bb-mode off + regime-gate` 스윕에서 채택기준 최초 통과(th13 in +0.12%/out +0.18%, th14 연속 통과). `score_signal(ind, bb_mode)` 인자 추가(코인 "off"·주식 기본값 "current"로 무영향), `BUY_SCORE_THRESHOLD` 12→13, 시뮬 레짐 필터 바이패스 제거(F&G 바이패스는 유지). pullback 가점 모드는 전 구간 음수로 기각 |
 
 ## VPS 인프라
 

@@ -63,10 +63,10 @@ BUY_CONFIRM_TICKS = int(os.getenv("BUY_CONFIRM_TICKS", "1"))
 
 # ─── 진입 점수 임계치 ───
 # 가중 종합점수(일봉×2.5 + 1h×2 + 1m×0.5)가 이 값 이상이면 '강한 매수' 후보로 진입.
-# 진입 신호 재설계(추세정렬형) + 시장 레짐 필터와 함께 backtest.py로 검증한 값:
-#   365일 구간(Buy&Hold -39%)에서 임계치 12 + 레짐필터 = 거래당 기대값 +0.15%(양수).
-# 구버전 역추세 룰의 기본값은 8이었으나, 재설계 룰에서는 12가 양의 기대값 구간이다.
-BUY_SCORE_THRESHOLD = float(os.getenv("BUY_SCORE_THRESHOLD", "12"))
+# 2026-07-14 채택: bb-off(상승추세 BB 추격 가점 제거) + 레짐게이트 스윕 결과
+#   in-sample +0.12% / out-of-sample +0.18% (임계치 13·14 연속 통과 — 이웃 안정성 확인).
+# BB 가점 제거가 필수 기여: 레짐게이트 단독(bb_mode="current")은 out 전 임계값 음수.
+BUY_SCORE_THRESHOLD = float(os.getenv("BUY_SCORE_THRESHOLD", "13"))
 
 # ─── 시장 레짐 필터 ───
 # True면 시장 프록시(BTC) 일봉 추세가 하락(ema_short < ema_mid)일 때 전 종목 신규 매수를

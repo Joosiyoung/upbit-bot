@@ -111,9 +111,10 @@ def row_to_ind(df: pd.DataFrame, i: int) -> dict:
 # ─────────────────────────────────────────────
 
 def score_signal_experimental(ind: dict, bb_mode: str = "current", min_atr_pct: float = 0.0) -> float:
-    if bb_mode == "current":
-        score = score_signal(ind)
-    elif bb_mode in ("flip", "off"):
+    if bb_mode in ("current", "off"):
+        # "off"는 score_signal의 bb_mode="off"로 위임 — 이중 구현 제거
+        score = score_signal(ind, bb_mode=bb_mode)
+    elif bb_mode in ("flip", "pullback"):
         # score_signal 본체 로직 복제(BB 블록만 교체) -- 일회성 실험 스크립트라 중복 허용
         es, em, el = ind['ema_short'], ind['ema_mid'], ind['ema_long']
         rsi = ind['rsi']
@@ -150,7 +151,15 @@ def score_signal_experimental(ind: dict, bb_mode: str = "current", min_atr_pct: 
             else:
                 if bb_pct >= 1.0:    score -= 2
                 elif bb_pct >= 0.8:  score -= 1
-        # bb_mode == "off": BB 블록 완전 생략
+        elif bb_mode == "pullback":
+            # 섀도우 실측(78건)·주식 백테스트 공통 결론: BB 상단 추격 해롭고 하단 눌림 유리
+            # 비추세 BB 블록은 현행 유지, 상승추세 블록만 교체
+            if bullish:
+                if bb_pct <= 0.3:    score += 1    # 상승추세 내 눌림목 가점
+                elif bb_pct >= 0.8:  score -= 1    # 상승추세 추격 감점
+            else:
+                if bb_pct >= 1.0:    score -= 2
+                elif bb_pct >= 0.8:  score -= 1
 
         if bullish and sk < 40:  score += 1
         elif sk > 85:            score -= 1
@@ -433,8 +442,8 @@ def main():
     ap.add_argument("--tickers", default=",".join(DEFAULT_TICKERS),
                     help="쉼표구분 티커 목록")
     ap.add_argument("--days", type=int, default=90, help="1시간봉 백테스트 기간(일)")
-    ap.add_argument("--threshold", type=float, default=12.0,
-                    help="매수 진입 점수 기준 (라이브 기본 config.BUY_SCORE_THRESHOLD와 일치)")
+    ap.add_argument("--threshold", type=float, default=config.BUY_SCORE_THRESHOLD,
+                    help=f"매수 진입 점수 기준 (기본값: config.BUY_SCORE_THRESHOLD={config.BUY_SCORE_THRESHOLD})")
     ap.add_argument("--confirm", type=int, default=1,
                     help="진입 확정에 필요한 연속 봉 수(디바운스). 1=즉시, 2+=리페인팅 방지")
     ap.add_argument("--intrabar", action="store_true",
@@ -443,8 +452,8 @@ def main():
                     help="신호반전(sell-strong) 청산 비활성화 -- 추세추종 진입의 휩쏘 청산 영향 측정용")
     ap.add_argument("--regime-gate", action="store_true",
                     help="시장 레짐 필터: BTC 일봉 하락 추세 구간 신규 진입 차단")
-    ap.add_argument("--bb-mode", choices=["current", "flip", "off"], default="current",
-                    help="볼린저밴드 점수 로직 실험(실험 1): current=현행, flip=눌림목 매수형, off=BB 미반영")
+    ap.add_argument("--bb-mode", choices=["current", "flip", "off", "pullback"], default="current",
+                    help="볼린저밴드 점수 로직 실험(실험 1): current=현행, flip=눌림목 매수형, off=BB 미반영, pullback=정교한 눌림목(bb_pct<=0.3 +1, >=0.8 -1)")
     ap.add_argument("--min-atr", type=float, default=0.0,
                     help="변동성 하한 게이트(실험 2): atr_pct 미달 종목 진입 차단. 0=비활성(기본, 회귀 없음)")
     ap.add_argument("--tp", type=float, default=config.TAKE_PROFIT_PERCENT,
