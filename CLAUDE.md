@@ -2,7 +2,7 @@
 
 Flask + pyupbit 기반 코인 자동매매 + KIS API 기반 국내주식 시뮬 봇. 대시보드(웹), Telegram 원격 제어, Oracle Cloud VPS 24시간 운영.
 
-> **진행 중 작업**: 백테스트-라이브 정합성 개선. 현황·근거·남은 일은 [docs/UPGRADE_NOTES.md](docs/UPGRADE_NOTES.md) 참조. 청산 판정은 `core/exit_rules.py`, 진입 점수 가중치는 `core/scoring.py` 단일 구현을 라이브·백테스터가 공유한다. 변경 시 `python -m pytest tests`로 특성 테스트 확인.
+> **진행 중 작업**: 신호 재설계(BB 추격 가점 제거 + 임계치 13 + 시뮬 레짐게이트, 2026-07-14 채택)는 마진이 얇아(180일 분할검증 EV in +0.12%/out +0.18%) 라이브 시뮬 EV를 계속 추적 중. 남은 일: sim_krw 잔고 표시 0.05% 이중차감 버그(낮은 우선순위, EV 측정엔 무영향) 미수정, 주식 모듈 동일 처리(특성테스트·단일구현 추출)는 후순위 대기. 현황·근거는 [docs/UPGRADE_NOTES.md](docs/UPGRADE_NOTES.md) 참조. 청산 판정은 `core/exit_rules.py`, 진입 점수 가중치는 `core/scoring.py`(`score_signal`의 `bb_mode` 인자 포함) 단일 구현을 라이브·백테스터가 공유한다. 변경 시 `python -m pytest tests`로 특성 테스트 확인.
 
 ## 실행 명령어
 
@@ -247,7 +247,7 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 - **`TRADING_BLACKLIST` 이원적 의미** — 매수 차단에는 `PERSONAL_HOLDINGS_BLACKLIST`(XRP·CRO·RVN) ∪ `config.STABLE_COINS`(8종) 합집합 11종 전부 적용. 청산(Phase 1)에서는 개인 보유분만 무조건 스킵, 스테이블코인은 `bot_bought=True`면 청산 허용. 두 세트를 하나로 취급하면 봇이 실수로 산 스테이블코인이 영구 동결됨 (2026-07-02 USDT 3,388만원 동결 버그로 발견).
 - **`_sync_live_positions` 라이브 모드 잠재 리스크** — 실거래(`live:true`) 전환 시 블랙리스트 제외 종목을 "매도됨"으로 오인해 포지션이 조용히 사라질 수 있다. 현재 `live:false`라 비활성 상태이지만 라이브 전환 전 반드시 검토·수정 필요.
 - **KIS 일봉/분봉 API 응답은 내림차순(최신순)** — `inquire-daily-itemchartprice` 등 KIS OHLCV 응답은 날짜가 최신→과거 순. 페이징 시 `df.index.min()`으로 명시적으로 최솟값을 구해야 함. `df.index[0]` 사용 시 하루치만 중복 이동하는 버그 발생 (2026-07-02 수정됨).
-- **섀도우 로그 (`shadow` 필드)** — 매수 시점 게이트 상태(`regime_ok`·`fg_block`·`atr_pct`·`pullback_pct`·`bb_pct`)가 JSONL에 기록됨. 매매 판단에는 반영되지 않음 — 신호 재설계 임계값 실측 검증 목적. 30건 이상 축적 후 진입 신호 재설계 단계 진입 예정.
+- **섀도우 로그 (`shadow` 필드)** — 매수 시점 게이트 상태(`regime_ok`·`fg_block`·`atr_pct`·`pullback_pct`·`bb_pct`)가 JSONL에 기록됨. 필드 자체는 매매 판단에 직접 반영되지 않는 진단용 기록. 78건 실측 기반 신호 재설계(BB 추격 가점 제거) 2026-07-14 채택 완료 — 이후로는 채택된 신호의 라이브 성과 추적 목적으로 계속 축적 중. 진단 도구: `scripts/shadow_analysis.py`(매수 shadow ↔ 매도 손익 FIFO 매칭, 피처별 분위 분석).
 
 ## 최근 변경 이력
 

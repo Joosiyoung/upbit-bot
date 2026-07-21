@@ -59,8 +59,8 @@ core/
 scripts/
   backtest.py            # 코인 백테스터 (--tp/--sl/--max-hold/--split/--sweep-threshold)
   stock_backtest.py      # 주식 백테스터 (KIS OHLCV → score_signal)
-  shadow_analysis.py     # 섀도우 로그↔거래성과 FIFO 매칭 진단 (UPGRADE_NOTES §1.5 재판정 도구)
-tests/                   # 특성 테스트 41개 (score_signal·indicators·judge_exit·weighted_score) — pip install -r requirements-dev.txt
+  shadow_analysis.py     # 섀도우 로그↔거래성과 FIFO 매칭 진단 (UPGRADE_NOTES §2 재판정 도구)
+tests/                   # 특성 테스트 47개 (score_signal·indicators·judge_exit·weighted_score) — pip install -r requirements-dev.txt
 deploy/
   restart-claude.sh      # VPS claude-remote tmux 세션 재시작 스크립트 (100755)
   claude-remote-watchdog.sh  # 세션 미기동 시 자동 복구 (cron @reboot + */5)
@@ -171,6 +171,10 @@ logs/
 |------|------|------|
 | 구 룰 (역추세) | -0.41% | 50.4% |
 | **재설계 + 레짐필터 (th=12)** | **+0.15%** | 48.2% |
+
+> 위 표는 최초 재설계(2026-06-13)의 365일 전체 구간 결과. 2026-07-14 이후 운영 설정(bb-off + 레짐게이트 + th=13)은
+> 180일 in/out-of-sample 분할 검증 기준 EV in +0.12% / out +0.18%로 채택됨(승률 미집계, 365일 재실행 결과 아님).
+> 상세: [docs/UPGRADE_NOTES.md §2.2](docs/UPGRADE_NOTES.md)
 
 ---
 
