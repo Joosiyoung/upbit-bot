@@ -41,6 +41,13 @@ GLOBAL_BUY_COOLDOWN_MIN  = int(os.getenv("GLOBAL_BUY_COOLDOWN_MIN",    "120"))  
 MAX_HOLD_HOURS           = float(os.getenv("MAX_HOLD_HOURS",           "48"))   # 최대 보유 시간 (시간) → 초과 시 청산 (time-stop)
 MARKET_STALE_SEC         = int(os.getenv("MARKET_STALE_SEC",           "180"))  # 시장 캐시 신선도 한계 (초) → 초과 시 신규 매수 차단
 
+# ─── 매도신호(데드크로스) 청산 on/off ───
+# 2026-09-27 실측 진단: '매도신호'(sell-strong/데드크로스) 청산이 라이브 시뮬 58건에서
+# 승률 12%·평균 -1.42%·누적 -82%p로 순손실 경로임을 확인(log-analyzer + backtest
+# --no-signal-exit 교차검증: 제거 시 in/out EV 모두 개선). 기본 False(비활성)로 제거.
+# True로 되돌리면 재활성화. judge_exit(no_signal_exit=)로 전달됨.
+SIGNAL_EXIT_ENABLED = os.getenv("SIGNAL_EXIT_ENABLED", "False").lower() == "true"
+
 # ─── 트레일링 스탑 ───
 # 2026-06-22: 트레일링이 +5% 익절 도달을 100% 차단(승자 조기절단) → 9999로 OFF (주식 모듈과 동일 방식, 로직 무변경)
 TRAILING_START_PCT = float(os.getenv("TRAILING_START_PCT", "9999"))  # 최고 수익률이 이 값 이상이면 트레일링 활성화 (%). 9999=비활성

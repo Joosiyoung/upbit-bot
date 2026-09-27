@@ -695,6 +695,7 @@ def run_auto_trade():
                 take_profit_pct, stop_loss_pct,
                 config.TRAILING_START_PCT, config.TRAILING_STOP_PCT,
                 config.MAX_HOLD_HOURS,
+                no_signal_exit=not config.SIGNAL_EXIT_ENABLED,
             )
             if exit_key == "익절":
                 should_sell = True

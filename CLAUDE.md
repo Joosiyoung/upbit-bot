@@ -2,7 +2,7 @@
 
 Flask + pyupbit 기반 코인 자동매매 + KIS API 기반 국내주식 시뮬 봇. 대시보드(웹), Telegram 원격 제어, Oracle Cloud VPS 24시간 운영.
 
-> **진행 중 작업**: 신호 재설계(BB 추격 가점 제거 + 임계치 13 + 시뮬 레짐게이트, 2026-07-14 채택)는 마진이 얇아(180일 분할검증 EV in +0.12%/out +0.18%) 라이브 시뮬 EV를 계속 추적 중. 남은 일: sim_krw 잔고 표시 0.05% 이중차감 버그(낮은 우선순위, EV 측정엔 무영향) 미수정, 주식 모듈 동일 처리(특성테스트·단일구현 추출)는 후순위 대기. 현황·근거는 [docs/UPGRADE_NOTES.md](docs/UPGRADE_NOTES.md) 참조. 청산 판정은 `core/exit_rules.py`, 진입 점수 가중치는 `core/scoring.py`(`score_signal`의 `bb_mode` 인자 포함) 단일 구현을 라이브·백테스터가 공유한다. 변경 시 `python -m pytest tests`로 특성 테스트 확인.
+> **진행 중 작업 (2026-09-27 실측 재검증)**: 2026-07-14 신호 재설계의 백테스트 양수(180d in +0.12%/out +0.18%)는 **라이브 시뮬에서 재현되지 않았다** — 완결 888건 진단 결과 재설계 후 거래당 EV **-0.28%(여전히 음수)**, 재설계 전(-0.475%) 대비 개선폭은 **통계적으로 무의미**(t=0.60). 손익분기 승률 41% vs 실제 37%. 상대강도 랭킹·유동성 메이저 유니버스 교체를 backtest로 검증했으나 **전 구성이 in-sample(횡보장) 음수 = 불장 베타(구간 B&H +41%)이지 레짐-강건 알파가 아님 → 미채택**. 진입 shadow 피처는 상관 ~0으로 튜닝 레버 소진. **결론: 파라미터/유니버스 튜닝으로 흑자 불가 — 새 알파 소스 필요. 라이브 전환 보류(전량 시뮬 유지).** 이번에 반영한 유일한 변경은 데드크로스 청산 제거(`SIGNAL_EXIT_ENABLED=False`, 아래 표 참조). 남은 일: sim_krw 잔고 0.05% 이중차감 버그(낮은 우선순위), 주식 트랙 폐기 결정(2026-09-27). 청산 판정은 `core/exit_rules.py`, 진입 점수 가중치는 `core/scoring.py`(`score_signal`의 `bb_mode` 인자) 단일 구현을 라이브·백테스터가 공유. 변경 시 `python -m pytest tests`로 특성 테스트 확인.
 
 ## 실행 명령어
 
@@ -131,8 +131,7 @@ core/
   ai_analysis.py        # Fear & Greed 조회·캐시 워커
   sheets_client.py      # Google Sheets 실시간 거래 적재 (코인·국내주식, 오프라인 버퍼링)
   stock/
-    trader.py           # 국내 주식 시뮬 매매 로직 + _stock_market_notifier(장 시작 자동 시작·알림 데몬)
-    trading_control.py  # 국내 주식 시작/중지/상태 (Flask ↔ Telegram 공용)
+    trader.py           # 국내 주식 시뮬 매매 로직 + 시작/중지/상태(Flask ↔ Telegram 공용) + _stock_market_notifier(장 시작 자동 시작·알림 데몬)
     kis_auth.py         # KIS OAuth2 토큰 관리
     kis_client.py       # KIS API 래퍼 (국내 OHLCV·현재가·거래량순위)
     universe.py         # 국내 매매 대상 종목 풀 (KOSPI 추세섹터 18종목)
@@ -173,7 +172,7 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 
 | 파라미터 | 기본값 | 설명 |
 |---------|--------|------|
-| `BUY_SCORE_THRESHOLD` | 13 | 진입 점수 임계치 (2026-07-14 채택: bb-off+레짐게이트 180d in +0.12% / out +0.18%, 임계값 13·14 연속 통과) |
+| `BUY_SCORE_THRESHOLD` | 13 | 진입 점수 임계치 (2026-07-14 채택: bb-off+레짐게이트 180d in +0.12% / out +0.18%). ⚠️ 2026-09-27 실측: 라이브 시뮬 EV **-0.28%**(개선 통계 무의미) — 백테스트 양수는 불장 베타로 판명, 라이브 미전환 |
 | `MARKET_REGIME_FILTER` | True | BTC EMA 하락 시 전 종목 매수 차단 (2026-07-14부터 시뮬에도 동일 적용) |
 | `MAX_LOSS_PERCENT` | 4.0% | 손절 (2026-06-22 알트 유니버스 재튜닝: 3.0→4.0) |
 | `TAKE_PROFIT_PERCENT` | 6.0% | 익절 (2026-06-22 재튜닝: 5.0→6.0, 알트 변동성에 넓은 타깃) |
@@ -182,6 +181,7 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | `MAX_HOLD_HOURS` | 48h | time-stop. 파라미터 스윕(24조합) 결과 현행값 유지 결정 (2026-07-05) |
 | `DAILY_LOSS_LIMIT_PCT` | 5.0% | 일일 손실 한도 초과 시 당일 매수 차단 |
 | `EQUAL_WEIGHT_SIZING` | True | 종목당 금액을 (총자산÷MAX_POSITIONS)로 상한 |
+| `SIGNAL_EXIT_ENABLED` | False | 매도신호(데드크로스) 청산 on/off. **2026-09-27 제거**(라이브 58건 승률12%·평균-1.42%·누적-82%p 순손실 + backtest 제거 시 in/out EV 개선). `judge_exit(no_signal_exit=)`로 전달. True로 재활성화 |
 
 ### 주식 (config.py STOCK_*)
 
@@ -273,6 +273,8 @@ VPS `.env`는 git 미추적 — pull해도 보존. 로컬과 별도 관리.
 | 2026-07-05 | 인프라 | **폴더 정리**: `project_report.html`, `draft/plan_stock_module_*.md`, `draft/us_stock_implementation_plan.md`, `draft/_sheets_export/` 삭제. `.gitignore`에 `skills-lock.json` 추가 |
 | 2026-07-05 | 방향 | **신호 재설계 방향 채택**: log-analyzer(corr=0.049)·bot-enhancer(corr=0.051)·param-optimizer 스윕(전조합 음수) 3개 독립 분석 일치 → 섀도우 로그 30건 이상 축적 후 진입 신호 재설계 단계 진입 예정 |
 | 2026-07-14 | 코인 | **신호 재설계 채택 — BB 추격 가점 제거 + 임계치 13 + 시뮬 레짐 정합화**: 섀도우 78건 매칭(bb_pct 하위 +0.58% vs 상위 -0.81%)·주식 백테스트 교차 확인 후 `bb-mode off + regime-gate` 스윕에서 채택기준 최초 통과(th13 in +0.12%/out +0.18%, th14 연속 통과). `score_signal(ind, bb_mode)` 인자 추가(코인 "off"·주식 기본값 "current"로 무영향), `BUY_SCORE_THRESHOLD` 12→13, 시뮬 레짐 필터 바이패스 제거(F&G 바이패스는 유지). pullback 가점 모드는 전 구간 음수로 기각 |
+| 2026-09-27 | 코인 | **실측 재검증 + 데드크로스 청산 제거**: 라이브 시뮬 888건 진단 — 재설계 후 EV **-0.28%**(여전히 음수, 개선폭 t=0.60 무의미), 손익분기 승률 41% vs 실제 37%, shadow 피처 상관 ~0. 상대강도 랭킹·유동성 메이저 유니버스 교체를 backtest 검증 → 헤드라인 EV는 양수지만 **전부 in-sample(횡보장) 음수 = 불장 베타(구간 B&H +41%)이지 레짐-강건 알파 아님 → 미채택**. 데드크로스 청산만 제거(`SIGNAL_EXIT_ENABLED=False` 신규, 라이브 로그·backtest·log-analyzer 3개 수렴). 결론: 파라미터/유니버스 튜닝 소진 — 새 알파 소스 필요, 라이브 전환 보류. bb_mode 78건 근거는 651건에서 방향 역전 확인(소표본 노이즈였을 가능성) |
+| 2026-09-27 | 방향 | **주식 트랙 폐기 결정**: 사용자 판단으로 국내주식 시뮬 트랙 중단. 코인 트랙에 집중 |
 
 ## VPS 인프라
 

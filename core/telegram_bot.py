@@ -385,6 +385,7 @@ def _cmd_params() -> str:
     lines.append(f"DAILY_LOSS_LIMIT_PCT: {config.DAILY_LOSS_LIMIT_PCT}%")
     lines.append(f"MAX_POSITIONS: {config.MAX_POSITIONS}")
     lines.append(f"MARKET_REGIME_FILTER: {config.MARKET_REGIME_FILTER}")
+    lines.append(f"SIGNAL_EXIT_ENABLED (데드크로스청산): {config.SIGNAL_EXIT_ENABLED}")
     return "\n".join(lines)
 
 
