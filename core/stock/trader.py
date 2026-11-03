@@ -141,7 +141,7 @@ def _stock_market_notifier():
                 market_was_open = True
                 with _stock_lock:
                     already_running = _stock_trading_state["enabled"]
-                if not already_running:
+                if not already_running and config.STOCK_SIM_ENABLED:
                     result = start_stock_trading()
                     logging.info("장 시작 자동 시작: %s", result)
                     if result.startswith("⚠️"):

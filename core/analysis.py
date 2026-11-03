@@ -109,20 +109,14 @@ def score_signal(ind, bb_mode: str = "current"):
 
     # ── 볼린저: 추세 내 위치로 해석 ──
     # bb_mode="off": 상승추세 BB 블록 생략 (추격 가점 제거 — 코인 경로 전용).
-    # bb_mode="current": 현행 동작 유지 (주식 경로 기본값).
-    if bb_mode == "off":
-        # 비추세 BB 블록만 적용 (상승추세 BB 완전 생략)
-        if not bullish:
-            if bb_pct >= 1.0:   score -= 2    # 비추세 상단 이탈 → 매도
-            elif bb_pct >= 0.8: score -= 1
-    else:
-        # 현행 동작 (current)
-        if bullish:
+    # bb_mode="current": 현행 동작 유지 (주식 경로 기본값). 비추세 블록은 모드 무관 동일.
+    if bullish:
+        if bb_mode != "off":
             if bb_pct >= 0.8:   score += 1    # 상단 주행 = 강세 지속
             elif bb_pct <= 0.0: score -= 1    # 추세 이탈 경고
-        else:
-            if bb_pct >= 1.0:   score -= 2    # 비추세 상단 이탈 → 매도
-            elif bb_pct >= 0.8: score -= 1
+    else:
+        if bb_pct >= 1.0:   score -= 2    # 비추세 상단 이탈 → 매도
+        elif bb_pct >= 0.8: score -= 1
 
     # ── 스토캐스틱 (보조) ──
     if bullish and sk < 40:  score += 1   # 추세 내 단기 눌림

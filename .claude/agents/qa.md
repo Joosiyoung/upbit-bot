@@ -28,7 +28,6 @@ core/notifier.py
 core/upbit_client.py
 core/ai_analysis.py
 core/stock/trader.py
-core/stock/trading_control.py
 core/stock/kis_auth.py
 core/stock/kis_client.py
 core/stock/universe.py
@@ -46,7 +45,7 @@ scripts/stock_backtest.py
 ```bash
 cd "d:/Claude Test"
 python -m py_compile core/config.py core/trader.py core/trading_control.py core/data_builder.py core/analysis.py core/indicators.py core/telegram_bot.py core/notifier.py core/upbit_client.py core/ai_analysis.py app.py
-python -m py_compile core/stock/trader.py core/stock/trading_control.py core/stock/kis_auth.py core/stock/kis_client.py core/stock/universe.py
+python -m py_compile core/stock/trader.py core/stock/kis_auth.py core/stock/kis_client.py core/stock/universe.py
 python -m py_compile scripts/backtest.py scripts/stock_backtest.py
 ```
 
@@ -63,7 +62,7 @@ python -m py_compile scripts/backtest.py scripts/stock_backtest.py
 ```bash
 grep -n "_trading_state\[" core/trader.py core/trading_control.py app.py
 grep -n "_stock_positions\[" core/stock/trader.py app.py
-grep -n "_stock_trading_state\[" core/stock/trader.py core/stock/trading_control.py app.py
+grep -n "_stock_trading_state\[" core/stock/trader.py app.py
 ```
 
 패턴 예시:

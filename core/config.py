@@ -188,6 +188,7 @@ STOCK_MAX_SLOTS_PER_TICKER  = int(os.getenv("STOCK_MAX_SLOTS_PER_TICKER", "2")) 
 STOCK_ENTRY_CHANGE_MAX  = float(os.getenv("STOCK_ENTRY_CHANGE_MAX",  "2.0"))   # 당일 등락률 상한 (%)
 STOCK_ENTRY_CHANGE_MIN  = float(os.getenv("STOCK_ENTRY_CHANGE_MIN",  "-3.0"))  # 당일 등락률 하한 (%)
 STOCK_SIM_BUDGET = int(os.getenv("STOCK_SIM_BUDGET", "5000000"))  # 주식 시뮬 초기 예산 (KRW)
+STOCK_SIM_ENABLED = False  # 2026-09-27 주식 트랙 폐기 결정 — 장 시작 자동 재시작 차단. 재개 시 True로 변경
 
 # ─── Google Sheets 연동 ───
 GOOGLE_SHEETS_ID       = os.getenv("GOOGLE_SHEETS_ID", "")
